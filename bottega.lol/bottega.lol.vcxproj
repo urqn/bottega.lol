@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{B2A9C1D0-7F4E-4B6E-9A2C-1D8E3F0A5B7C}</ProjectGuid>
+    <RootNamespace>bottega.lol</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)build</OutDir>
+    <IntDir>$(SolutionDir)build\obj\$(Configuration)\</IntDir>
+    <TargetName>bottega.lol</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;NOMINMAX;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdclatest</LanguageStandard_C>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)src\core;$(ProjectDir)src\render;$(ProjectDir)src\features;$(ProjectDir)src\lib;$(ProjectDir)src\lib\imgui;$(ProjectDir)src\lib\glm;$(ProjectDir)src\lib\yoga;$(ProjectDir)src\lib\nlohmann;$(ProjectDir)src\lib\freetype\include;$(ProjectDir)src\ui\framework;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)src\lib\freetype\win64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;dcomp.lib;dwmapi.lib;winhttp.lib;freetype64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;NOMINMAX;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard_C>stdclatest</LanguageStandard_C>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)src\core;$(ProjectDir)src\render;$(ProjectDir)src\features;$(ProjectDir)src\lib;$(ProjectDir)src\lib\imgui;$(ProjectDir)src\lib\glm;$(ProjectDir)src\lib\yoga;$(ProjectDir)src\lib\nlohmann;$(ProjectDir)src\lib\freetype\include;$(ProjectDir)src\ui\framework;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>MaxSpeed</Optimization>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>$(ProjectDir)src\lib\freetype\win64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;dcomp.lib;dwmapi.lib;winhttp.lib;freetype64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\core\mem.cpp" />
+    <ClCompile Include="src\core\offsets.cpp" />
+    <ClCompile Include="src\core\rbx.cpp" />
+    <ClCompile Include="src\features\esp.cpp" />
+    <ClCompile Include="src\features\aim.cpp" />
+<ClCompile Include="src\features\movement.cpp" />
+    <ClCompile Include="src\features\silent_ray.cpp" />
+    <ClCompile Include="src\render\dx11.cpp" />
+    <ClCompile Include="src\render\overlay.cpp" />
+    <ClCompile Include="src\ui\framework\app\app.cpp" />
+    <ClCompile Include="src\ui\framework\base\animation\animation.cpp" />
+    <ClCompile Include="src\ui\framework\base\object\object.cpp" />
+    <ClCompile Include="src\ui\framework\config\config.cpp" />
+    <ClCompile Include="src\ui\framework\controls\button\button.cpp" />
+    <ClCompile Include="src\ui\framework\controls\checkbox\checkbox.cpp" />
+    <ClCompile Include="src\ui\framework\controls\color_picker\color_picker.cpp" />
+    <ClCompile Include="src\ui\framework\controls\container\container.cpp" />
+    <ClCompile Include="src\ui\framework\controls\dropdown\dropdown.cpp" />
+    <ClCompile Include="src\ui\framework\controls\keybind\keybind.cpp" />
+    <ClCompile Include="src\ui\framework\controls\label\label.cpp" />
+    <ClCompile Include="src\ui\framework\controls\listbox\listbox.cpp" />
+    <ClCompile Include="src\ui\framework\controls\multi_dropdown\multi_dropdown.cpp" />
+    <ClCompile Include="src\ui\framework\controls\popup\popup.cpp" />
+    <ClCompile Include="src\ui\framework\controls\slider\slider.cpp" />
+    <ClCompile Include="src\ui\framework\controls\subtab_bar\subtab_bar.cpp" />
+    <ClCompile Include="src\ui\framework\controls\tab\tab.cpp" />
+    <ClCompile Include="src\ui\framework\controls\tab_control\tab_control.cpp" />
+    <ClCompile Include="src\ui\framework\controls\text_input\text_input.cpp" />
+    <ClCompile Include="src\ui\framework\input\input.cpp" />
+    <ClCompile Include="src\ui\framework\render\render.cpp" />
+    <ClCompile Include="src\ui\framework\render\texture\texture.cpp" />
+    <ClCompile Include="src\ui\framework\utils\color.cpp" />
+    <ClCompile Include="src\ui\framework\window\window.cpp" />
+    <ClCompile Include="src\lib\imgui\imgui.cpp" />
+    <ClCompile Include="src\lib\imgui\imgui_draw.cpp" />
+    <ClCompile Include="src\lib\imgui\imgui_tables.cpp" />
+    <ClCompile Include="src\lib\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="src\lib\imgui\imgui_impl_dx11.cpp" />
+    <ClCompile Include="src\lib\imgui\imgui_impl_win32.cpp" />
+    <ClCompile Include="src\lib\imgui\misc\freetype\imgui_freetype.cpp" />
+    <ClCompile Include="src\lib\glm\glm\detail\glm.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\event\event.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\log.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\Utils.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\YGConfig.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\YGEnums.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\YGLayout.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\YGNode.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\YGNodePrint.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\YGStyle.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\YGValue.cpp" />
+    <ClCompile Include="src\lib\yoga\yoga\Yoga.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\core\mem.h" />
+    <ClInclude Include="src\core\offsets.h" />
+    <ClInclude Include="src\core\rbx.h" />
+    <ClInclude Include="src\core\vec.h" />
+    <ClInclude Include="src\features\esp.h" />
+    <ClInclude Include="src\features\aim.h" />
+<ClInclude Include="src\features\movement.h" />
+    <ClInclude Include="src\features\silent_ray.h" />
+    <ClInclude Include="src\render\dx11.h" />
+    <ClInclude Include="src\render\overlay.h" />
+    <ClInclude Include="src\ui\framework\app\app.hpp" />
+    <ClInclude Include="src\ui\framework\base\animation\animation.hpp" />
+    <ClInclude Include="src\ui\framework\base\events\events.hpp" />
+    <ClInclude Include="src\ui\framework\base\hash\fnv.hpp" />
+    <ClInclude Include="src\ui\framework\base\object\object.hpp" />
+    <ClInclude Include="src\ui\framework\config\config.hpp" />
+    <ClInclude Include="src\ui\framework\controls\button\button.hpp" />
+    <ClInclude Include="src\ui\framework\controls\checkbox\checkbox.hpp" />
+    <ClInclude Include="src\ui\framework\controls\color_picker\color_picker.hpp" />
+    <ClInclude Include="src\ui\framework\controls\container\container.hpp" />
+    <ClInclude Include="src\ui\framework\controls\dropdown\dropdown.hpp" />
+    <ClInclude Include="src\ui\framework\controls\keybind\keybind.hpp" />
+    <ClInclude Include="src\ui\framework\controls\label\label.hpp" />
+    <ClInclude Include="src\ui\framework\controls\listbox\listbox.hpp" />
+    <ClInclude Include="src\ui\framework\controls\multi_dropdown\multi_dropdown.hpp" />
+    <ClInclude Include="src\ui\framework\controls\popup\popup.hpp" />
+    <ClInclude Include="src\ui\framework\controls\slider\slider.hpp" />
+    <ClInclude Include="src\ui\framework\controls\subtab_bar\subtab_bar.hpp" />
+    <ClInclude Include="src\ui\framework\controls\tab\tab.hpp" />
+    <ClInclude Include="src\ui\framework\controls\tab_control\tab_control.hpp" />
+    <ClInclude Include="src\ui\framework\controls\text_input\text_input.hpp" />
+    <ClInclude Include="src\ui\framework\input\input.hpp" />
+    <ClInclude Include="src\ui\framework\render\render.hpp" />
+    <ClInclude Include="src\ui\framework\render\texture\texture.hpp" />
+    <ClInclude Include="src\ui\framework\utils\color.hpp" />
+    <ClInclude Include="src\ui\framework\utils\style.hpp" />
+    <ClInclude Include="src\ui\framework\window\window.hpp" />
+    <ClInclude Include="src\lib\imgui\imgui.h" />
+    <ClInclude Include="src\lib\imgui\imgui_internal.h" />
+    <ClInclude Include="src\lib\imgui\imconfig.h" />
+    <ClInclude Include="src\lib\imgui\imstb_rectpack.h" />
+    <ClInclude Include="src\lib\imgui\imstb_textedit.h" />
+    <ClInclude Include="src\lib\imgui\imstb_truetype.h" />
+    <ClInclude Include="src\lib\imgui\imgui_impl_dx11.h" />
+    <ClInclude Include="src\lib\imgui\imgui_impl_win32.h" />
+    <ClInclude Include="src\lib\imgui\misc\freetype\imgui_freetype.h" />
+    <ClInclude Include="src\lib\string_encryption.hpp" />
+    <ClInclude Include="src\lib\lazy_imports.hpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

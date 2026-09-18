@@ -1,0 +1,10 @@
+# build output
+build/
+
+# runtime offset cache (downloaded from the offsets server)
+offsets.json
+offsets.version
+
+# visual studio
+.vs/
+*.user

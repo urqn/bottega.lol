@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\core">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\features">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\render">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000006}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\lib">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\lib\imgui">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\lib\glm">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000007}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\lib\yoga">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000008}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000010}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\app">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000011}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\base">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000012}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\config">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000013}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\controls">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000014}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\input">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000015}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\render">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000016}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\utils">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000017}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui\framework\window">
+      <UniqueIdentifier>{a1b2c3d0-0001-4000-a000-000000000018}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\mem.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\offsets.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\rbx.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\aim.cpp">
+      <Filter>src\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\esp.cpp">
+      <Filter>src\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\movement.cpp">
+      <Filter>src\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\features\silent_ray.cpp">
+      <Filter>src\features</Filter>
+    </ClCompile>
+    <ClCompile Include="src\render\dx11.cpp">
+      <Filter>src\render</Filter>
+    </ClCompile>
+    <ClCompile Include="src\render\overlay.cpp">
+      <Filter>src\render</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\app\app.cpp">
+      <Filter>src\ui\framework\app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\base\animation\animation.cpp">
+      <Filter>src\ui\framework\base</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\base\object\object.cpp">
+      <Filter>src\ui\framework\base</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\config\config.cpp">
+      <Filter>src\ui\framework\config</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\button\button.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\checkbox\checkbox.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\color_picker\color_picker.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\container\container.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\dropdown\dropdown.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\keybind\keybind.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\label\label.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\listbox\listbox.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\multi_dropdown\multi_dropdown.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\popup\popup.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\slider\slider.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\subtab_bar\subtab_bar.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\tab\tab.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\tab_control\tab_control.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\controls\text_input\text_input.cpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\input\input.cpp">
+      <Filter>src\ui\framework\input</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\render\render.cpp">
+      <Filter>src\ui\framework\render</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\render\texture\texture.cpp">
+      <Filter>src\ui\framework\render</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\utils\color.cpp">
+      <Filter>src\ui\framework\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\framework\window\window.cpp">
+      <Filter>src\ui\framework\window</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\imgui\imgui.cpp">
+      <Filter>src\lib\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\imgui\imgui_draw.cpp">
+      <Filter>src\lib\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\imgui\imgui_tables.cpp">
+      <Filter>src\lib\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\imgui\imgui_widgets.cpp">
+      <Filter>src\lib\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\imgui\imgui_impl_dx11.cpp">
+      <Filter>src\lib\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\imgui\imgui_impl_win32.cpp">
+      <Filter>src\lib\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\imgui\misc\freetype\imgui_freetype.cpp">
+      <Filter>src\lib\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\glm\glm\detail\glm.cpp">
+      <Filter>src\lib\glm</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\event\event.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\log.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\Utils.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\YGConfig.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\YGEnums.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\YGLayout.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\YGNode.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\YGNodePrint.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\YGStyle.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\YGValue.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+    <ClCompile Include="src\lib\yoga\yoga\Yoga.cpp">
+      <Filter>src\lib\yoga</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\core\mem.h">
+      <Filter>src\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\offsets.h">
+      <Filter>src\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\rbx.h">
+      <Filter>src\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\vec.h">
+      <Filter>src\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\aim.h">
+      <Filter>src\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\esp.h">
+      <Filter>src\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\movement.h">
+      <Filter>src\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\features\silent_ray.h">
+      <Filter>src\features</Filter>
+    </ClInclude>
+    <ClInclude Include="src\render\dx11.h">
+      <Filter>src\render</Filter>
+    </ClInclude>
+    <ClInclude Include="src\render\overlay.h">
+      <Filter>src\render</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\app\app.hpp">
+      <Filter>src\ui\framework\app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\base\animation\animation.hpp">
+      <Filter>src\ui\framework\base</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\base\events\events.hpp">
+      <Filter>src\ui\framework\base</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\base\hash\fnv.hpp">
+      <Filter>src\ui\framework\base</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\base\object\object.hpp">
+      <Filter>src\ui\framework\base</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\config\config.hpp">
+      <Filter>src\ui\framework\config</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\button\button.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\checkbox\checkbox.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\color_picker\color_picker.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\container\container.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\dropdown\dropdown.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\keybind\keybind.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\label\label.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\listbox\listbox.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\multi_dropdown\multi_dropdown.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\popup\popup.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\slider\slider.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\subtab_bar\subtab_bar.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\tab\tab.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\tab_control\tab_control.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\controls\text_input\text_input.hpp">
+      <Filter>src\ui\framework\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\input\input.hpp">
+      <Filter>src\ui\framework\input</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\render\render.hpp">
+      <Filter>src\ui\framework\render</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\render\texture\texture.hpp">
+      <Filter>src\ui\framework\render</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\utils\color.hpp">
+      <Filter>src\ui\framework\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\utils\style.hpp">
+      <Filter>src\ui\framework\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\framework\window\window.hpp">
+      <Filter>src\ui\framework\window</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imgui.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imgui_internal.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imconfig.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imstb_rectpack.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imstb_textedit.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imstb_truetype.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imgui_impl_dx11.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\imgui_impl_win32.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\imgui\misc\freetype\imgui_freetype.h">
+      <Filter>src\lib\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\string_encryption.hpp">
+      <Filter>src\lib</Filter>
+    </ClInclude>
+    <ClInclude Include="src\lib\lazy_imports.hpp">
+      <Filter>src\lib</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
