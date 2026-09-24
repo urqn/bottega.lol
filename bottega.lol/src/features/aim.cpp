@@ -1,4 +1,5 @@
 #include "aim.h"
+#include "check.h"
 #include "settings.h"
 
 #include <Windows.h>
@@ -195,9 +196,8 @@ namespace aim
 			SendInput(1, &in, sizeof(INPUT));
 		}
 
-		void write_rotation()
+		void write_rotation(uintptr_t cam)
 		{
-			const uintptr_t cam = rbx::camera;
 			if (!cam || !off::CameraRotation) return;
 
 			Mat3 local{};
@@ -216,11 +216,13 @@ namespace aim
 			g_write_spoofed.store(true, std::memory_order_release);
 		}
 
-		void restore_viewport()
+		// restore the spoofed viewport from the *live* visual engine size. the
+		// camera may already be gone when a match ends, so fail quietly.
+		void restore_viewport(uintptr_t cam)
 		{
-			const uintptr_t cam = rbx::camera;
+			if (!cam || !off::CameraViewport) return;
 			const Vec2 size = rbx::viewport();
-			if (!cam || !off::CameraViewport || size.x < 1.0f || size.y < 1.0f) return;
+			if (size.x < 1.0f || size.y < 1.0f) return;
 
 			const Vec2i16 v{ static_cast<std::int16_t>(std::lround(size.x)), static_cast<std::int16_t>(std::lround(size.y)) };
 			mem::write<Vec2i16>(cam + off::CameraViewport, v);
@@ -228,21 +230,23 @@ namespace aim
 
 		Vec2i16 calc_viewport(float tx, float ty, float dw, float dh, float mx, float my)
 		{
-			double tyd = static_cast<double>(ty);
-			if (tyd > static_cast<double>(dh) - 1.0) tyd = static_cast<double>(dh) - 1.0;
-			if (tyd < 1.0) tyd = 1.0;
+			double TargetY = static_cast<double>(ty);
+			if (TargetY < 1.0) TargetY = 1.0;
+			if (TargetY > static_cast<double>(dh) - 1.0) TargetY = static_cast<double>(dh) - 1.0;
 
-			double ratio = static_cast<double>(my) / tyd;
-			double vy = static_cast<double>(dh) * ratio;
-			if (vy > 32767.0) vy = 32767.0;
-			if (vy < 1.0) vy = 1.0;
+			double Ratio = static_cast<double>(my) / TargetY;
+			double VY = static_cast<double>(dh) * Ratio;
 
-			ratio = vy / static_cast<double>(dh);
-			double vx = 2.0 * static_cast<double>(mx) - ratio * (2.0 * static_cast<double>(tx) - static_cast<double>(dw));
-			if (vx > 32767.0) vx = 32767.0;
-			if (vx < 1.0) vx = 1.0;
+			if (VY > 32767.0) VY = 32767.0;
+			if (VY < 1.0) VY = 1.0;
 
-			return { static_cast<std::int16_t>(std::lround(vx)), static_cast<std::int16_t>(std::lround(vy)) };
+			Ratio = VY / static_cast<double>(dh);
+			double VX = 2.0 * static_cast<double>(mx) - Ratio * (2.0 * static_cast<double>(tx) - static_cast<double>(dw));
+
+			if (VX > 32767.0) VX = 32767.0;
+			if (VX < 1.0) VX = 1.0;
+
+			return { static_cast<std::int16_t>(std::round(VX)), static_cast<std::int16_t>(std::round(VY)) };
 		}
 
 		bool mouse_in_viewport(HWND hwnd, float dw, float dh, float& mx, float& my)
@@ -269,9 +273,8 @@ namespace aim
 			return true;
 		}
 
-		bool compute_viewport(Vec2i16& out)
+		bool compute_viewport(Vec2i16& out, uintptr_t cam)
 		{
-			const uintptr_t cam = rbx::camera;
 			if (!cam) return false;
 
 			const Vec3 world{
@@ -301,24 +304,36 @@ namespace aim
 			bool viewport_on = false;
 			while (!g_write_stop.load(std::memory_order_acquire))
 			{
+				if (mem::hProc == NULL) break;
+
+				// resolve the camera from the live datamodel every tick: the
+				// 30Hz cached rbx::camera goes stale during a match-end teardown
+				// and per-ms viewport writes into the freed object would land in
+				// recycled heap memory and corrupt/crash the game.
+				const uintptr_t cam = rbx::fresh_camera();
+
 				if (g_write_active.load(std::memory_order_acquire))
 				{
 					Vec2i16 v{};
-					if (compute_viewport(v))
+					if (cam && compute_viewport(v, cam))
 					{
 						g_last = v;
 						g_fails = 0;
 						viewport_on = true;
-						write_viewport(rbx::camera, g_last);
+						write_viewport(cam, g_last);
 					}
 					else if (viewport_on && g_fails < 40)
 					{
 						++g_fails;
-						write_viewport(rbx::camera, g_last);
+						if (cam)
+							write_viewport(cam, g_last);
 					}
 					else if (viewport_on)
 					{
-						restore_viewport();
+						if (cam)
+							restore_viewport(cam);
+						else
+							restore_viewport(rbx::camera);
 						g_write_spoofed.store(false, std::memory_order_release);
 						viewport_on = false;
 						g_fails = 0;
@@ -326,7 +341,10 @@ namespace aim
 				}
 				else if (viewport_on)
 				{
-					restore_viewport();
+					if (cam)
+						restore_viewport(cam);
+					else
+						restore_viewport(rbx::camera);
 					g_write_spoofed.store(false, std::memory_order_release);
 					viewport_on = false;
 					g_fails = 0;
@@ -334,13 +352,14 @@ namespace aim
 
 				if (g_rot_active.load(std::memory_order_acquire))
 				{
-					write_rotation();
+					if (cam)
+						write_rotation(cam);
 				}
 
 				Sleep(1);
 			}
 
-			restore_viewport();
+			restore_viewport(rbx::camera);
 			g_write_spoofed.store(false, std::memory_order_release);
 			return 0;
 		}
@@ -473,6 +492,8 @@ namespace aim
 			}
 
 			if (use_mode == 2 || bind == 0) return true;
+
+			if (check::blocked()) return false;
 
 			const bool down = key_down(bind);
 			if (use_mode == 1)

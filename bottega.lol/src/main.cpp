@@ -20,6 +20,19 @@
 #include <app/app.hpp>
 #include <config/config.hpp>
 
+#include "toast.h"
+#include "trigger.h"
+#include "hbe.h"
+#include "hit.h"
+#include "cosmetic.h"
+#include "world.h"
+#include "waypoints.h"
+#include "perf.h"
+#include "serverbrowser.h"
+#include "check.h"
+#include "freeze.h"
+#include "imgui.h"
+
 
 static bool bootstrap()
 {
@@ -100,6 +113,7 @@ int main()
     g_scan_thread = std::thread(scan_loop);
 
     std::vector<rbx::Player> plist;
+    std::shared_ptr<std::vector<rbx::Player>> plist_src;
     bool overlay_visible = true;     // window starts shown by overlay::create
 
     for (;;) {
@@ -108,7 +122,13 @@ int main()
 
         {
             std::lock_guard<std::mutex> lk(g_scan_mutex);
-            if (g_scan_playlist) plist = *g_scan_playlist;
+            // the scan thread swaps in a fresh snapshot at ~30Hz; copy only when
+            // it actually changed, not on every frame (players carry strings).
+            std::shared_ptr<std::vector<rbx::Player>> cur = g_scan_playlist;
+            if (cur && cur != plist_src) {
+                plist = *cur;
+                plist_src = cur;
+            }
         }
 
         // menu_open is our single source of truth for "is the menu up" and must
@@ -122,13 +142,36 @@ int main()
         aim::update(plist);
         app::set_players(plist);
 
+        // lazily spin up the ported feature workers; each start() is idempotent
+        // and only proceeds once, so toggles picked up later still take effect.
+        trigger::start();
+        hbe::start();
+        hit::start();
+        cosmetic::start();
+        world::start();
+        check::start();
+        freeze::start();
+
         // content is wanted whenever any always-on-screen visual is enabled -
         // the menu window, esp boxes, the watermark or the aim fov circles. the
         // draw functions gate themselves, so calling them with everything off is
         // a no-op; this just decides whether to run the render/present pass at all.
         const bool want_watermark = app::watermark_enabled();
         const bool want_aim_visuals = aim::draw_fov || aim::draw_silent_fov || aim::tracer;
-        const bool need_content = overlay::menu_open || esp::enabled || want_watermark || want_aim_visuals;
+        const bool want_hit_visuals = hit::markers_enabled;
+        const bool want_wp_visuals = wp::render_enabled;
+        const bool want_overlay = perf::stats;
+        const bool want_toasts = toast::wants_draw();
+        // real-time visuals only matter while the game actually owns the
+        // foreground: when alt-tabbed away they would render a stale snapshot
+        // every frame for nothing. esp/aim count as "live" only in-game, so the
+        // overlay stops being fed (and stops consuming gpu) the moment they're not.
+        const HWND fg = GetForegroundWindow();
+        const bool in_game = (fg == overlay::target) || (fg == overlay::hwnd);
+        const bool esp_live = esp::enabled && in_game;
+        const bool aim_visuals_live = want_aim_visuals && in_game;
+        const bool need_content = overlay::menu_open || esp_live || want_aim_visuals || want_watermark
+            || want_hit_visuals || want_wp_visuals || want_overlay || want_toasts;
 
         if (need_content)
         {
@@ -139,7 +182,19 @@ int main()
             overlay::begin_frame();
             aim::draw();
             esp::draw(plist);
+
+            const Mat4 vm = rbx::view_matrix();
+            const Vec2 dims{ ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y };
+            if (dims.x > 0.0f && dims.y > 0.0f)
+            {
+                if (hit::markers_enabled)
+                    hit::render(ImGui::GetBackgroundDrawList(), vm, dims);
+                wp::render(ImGui::GetBackgroundDrawList(), vm, dims);
+                perf::render(ImGui::GetBackgroundDrawList(), plist, dims);
+            }
+
             app::render();
+            toast::draw();
             overlay::end_frame();
         }
         else if (overlay_visible)
@@ -165,10 +220,15 @@ int main()
             g_boost_until = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
 
         const bool boosted = std::chrono::steady_clock::now() < g_boost_until
-            || esp::enabled || want_aim_visuals;
+            || esp_live || aim_visuals_live;
+
+        // the menu itself idles at 15fps when untouched (message wait wakes it
+        // on any queued input); it earns the full refresh-rate budget only while
+        // the cursor is actually live on it, so an open menu barely costs cpu.
+        const bool full_rate = overlay::input_recent();
 
         const double fps = (boosted && need_content)
-            ? (dx11::refresh_rate > 0.0 ? dx11::refresh_rate : 60.0)
+            ? (full_rate ? (dx11::refresh_rate > 0.0 ? dx11::refresh_rate : 60.0) : 60.0)
             : 15.0;
         const auto budget = std::chrono::milliseconds(static_cast<long long>(1000.0 / fps));
         const auto remain = budget - (std::chrono::steady_clock::now() - t0);
@@ -190,6 +250,13 @@ int main()
 
     mv::shutdown();
     aim::shutdown();
+    trigger::shutdown();
+    hbe::shutdown();
+    hit::shutdown();
+    cosmetic::shutdown();
+    world::shutdown();
+    check::shutdown();
+    freeze::shutdown();
     overlay::destroy();
     mem::detach();
     return 0;

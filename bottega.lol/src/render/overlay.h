@@ -7,6 +7,8 @@ namespace overlay {
     inline HWND hwnd = nullptr;
     inline HWND target = nullptr;
     inline bool menu_open = true;
+    // menu toggle key (VK code); synced from the app keybind, defaults to Insert.
+    inline int menu_key = VK_INSERT;
     inline bool streamproof = false;
     inline bool vsync = false;
     inline bool running = true;

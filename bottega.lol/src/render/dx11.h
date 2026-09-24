@@ -9,6 +9,8 @@ namespace dx11 {
     inline ID3D11DeviceContext* context = nullptr;
     inline IDXGISwapChain1* swap_chain = nullptr;
     inline ID3D11RenderTargetView* render_target = nullptr;
+    inline ID3D11Texture2D* depth_texture = nullptr;
+    inline ID3D11DepthStencilView* depth_view = nullptr;
     inline ID3D11BlendState* blend_state = nullptr;
 
     inline IDCompositionDevice* dcomp_device = nullptr;

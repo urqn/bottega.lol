@@ -150,6 +150,39 @@ uintptr_t find_child_byclass(uintptr_t inst, const char* cls) {
     return 0;
 }
 
+// shared cache-free chain; uses the uncached children()/classname() helpers so
+// hot writer threads never contend on (or read stale) cache_mutex snapshots.
+static uintptr_t live_datamodel()
+{
+    if (!mem::base || !off::FakeDataModelPtr) return 0;
+    const uintptr_t fdm = mem::read<uintptr_t>(mem::base + off::FakeDataModelPtr);
+    if (!fdm) return 0;
+    const uintptr_t dm = mem::read<uintptr_t>(fdm + off::FakeToReal);
+    return dm;
+}
+
+uintptr_t fresh_local_player()
+{
+    const uintptr_t dm = live_datamodel();
+    if (!dm) return 0;
+    for (const uintptr_t c : children(dm)) {
+        if (classname(c) == "Players")
+            return mem::read<uintptr_t>(c + off::LocalPlayer);
+    }
+    return 0;
+}
+
+uintptr_t fresh_camera()
+{
+    const uintptr_t dm = live_datamodel();
+    if (!dm) return 0;
+    for (const uintptr_t c : children(dm)) {
+        if (classname(c) == "Workspace")
+            return mem::read<uintptr_t>(c + off::Camera);
+    }
+    return 0;
+}
+
 
 std::vector<Player> players()
 {

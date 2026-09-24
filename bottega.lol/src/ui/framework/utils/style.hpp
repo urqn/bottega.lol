@@ -27,10 +27,11 @@ namespace gui::style
 		inline const Color hovered_control_bg{ 18, 18, 18 };
 
 		inline const Color separator{ 50, 50, 50 };
-		inline Color accent{ 255, 85, 200 };
+		inline Color accent{ 255, 255, 255 };
 
 		inline Color text_active{ 255, 255, 255 };
 		inline const Color text_hover{ 180, 180, 180 };
 		inline Color text_inactive{ 100, 100, 100 };
+		inline const Color text_shadow{ 0, 0, 0 };
 	}
 }

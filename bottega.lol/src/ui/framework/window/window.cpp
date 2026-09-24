@@ -1,6 +1,7 @@
 #include "window.hpp"
 
 #include <input/input.hpp>
+#include <overlay.h>
 #include <render/render.hpp>
 #include <utils/style.hpp>
 
@@ -77,15 +78,17 @@ namespace gui
 		{
 			struct BagSpot { float u, v, angle, alpha; };
 			static constexpr BagSpot bag_spots[]{
-				{ 0.07f, 0.14f, -0.30f, 0.045f }, { 0.16f, 0.78f, 0.22f, 0.05f },
-				{ 0.24f, 0.28f, 0.12f, 0.04f },   { 0.28f, 0.92f, -0.18f, 0.045f },
-				{ 0.42f, 0.08f, 0.25f, 0.04f },   { 0.47f, 0.45f, -0.10f, 0.035f },
-				{ 0.44f, 0.85f, 0.30f, 0.04f },   { 0.58f, 0.18f, -0.12f, 0.045f },
-				{ 0.64f, 0.62f, 0.18f, 0.04f },   { 0.74f, 0.06f, -0.24f, 0.045f },
-				{ 0.80f, 0.40f, 0.10f, 0.04f },   { 0.86f, 0.72f, -0.20f, 0.045f },
-				{ 0.90f, 0.12f, 0.15f, 0.038f },  { 0.94f, 0.88f, -0.28f, 0.05f },
-				{ 0.68f, 0.90f, 0.10f, 0.035f },  { 0.10f, 0.45f, -0.14f, 0.035f },
+				{ 0.12f, 0.16f, -0.30f, 0.04f },  { 0.20f, 0.80f, 0.22f, 0.045f },
+				{ 0.28f, 0.30f, 0.12f, 0.035f },  { 0.32f, 0.88f, -0.18f, 0.04f },
+				{ 0.45f, 0.12f, 0.25f, 0.035f },  { 0.50f, 0.50f, -0.10f, 0.03f },
+				{ 0.48f, 0.84f, 0.30f, 0.035f },  { 0.60f, 0.20f, -0.12f, 0.04f },
+				{ 0.66f, 0.62f, 0.18f, 0.035f },  { 0.74f, 0.14f, -0.24f, 0.04f },
+				{ 0.82f, 0.42f, 0.10f, 0.035f },  { 0.86f, 0.72f, -0.20f, 0.035f },
+				{ 0.12f, 0.46f, -0.14f, 0.03f },  { 0.66f, 0.88f, 0.10f, 0.03f },
+				{ 0.88f, 0.20f, 0.15f, 0.03f },   { 0.40f, 0.62f, 0.08f, 0.03f },
 			};
+
+			render::push_clip_rect(root_position, root_size);
 
 			for (const auto& spot : bag_spots)
 			{
@@ -95,9 +98,11 @@ namespace gui
 				};
 
 				render::rotate_vertices(spot.angle, [&] {
-					render::add_text(render::Fonts::Icons48px, ICON_FA_BAG_SHOPPING, pos, style::colors::accent.override_alpha(spot.alpha));
+					render::add_text(render::Fonts::Icons48px, ICON_FA_BAG_SHOPPING, pos, Color::white().override_alpha(spot.alpha));
 					});
 			}
+
+			render::pop_clip_rect();
 		}
 
 		if (!(window_flags & WindowFlags::NoTitleBar)) {
@@ -149,7 +154,7 @@ namespace gui
 		if (e.get_type() == EventType::KeyPress)
 		{
 			auto& ke = static_cast<KeyPressEvent&>(e);
-			if (ke.key == VK_INSERT)
+			if (react_to_menu_key && overlay::menu_key && ke.key == overlay::menu_key)
 			{
 				m_opened = !m_opened;
 				e.handled = true;

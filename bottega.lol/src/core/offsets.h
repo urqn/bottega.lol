@@ -37,11 +37,20 @@ inline uintptr_t CameraRotation   = 0;
     inline uintptr_t RigType          = 0;
     inline uintptr_t Size             = 0;
 
-    // exact-case lookup into the published map, e.g. off::find(xs("Humanoid.WalkSpeed"))
+    // exact-case lookup into the published map, e.g. off::find(xs("Humanoid.WalkSpeed")).
+    // the map is keyed by the property name (the leaf after the first dot of the
+    // published path), so a dotted path is resolved to its leaf as a fallback.
     inline uintptr_t find(const std::string& key)
     {
         const auto it = map.find(key);
-        return (it == map.end()) ? 0 : it->second;
+        if (it != map.end()) return it->second;
+        const size_t dot = key.find('.');
+        if (dot != std::string::npos && dot + 1 < key.size())
+        {
+            const auto it2 = map.find(key.substr(dot + 1));
+            if (it2 != map.end()) return it2->second;
+        }
+        return 0;
     }
 
     bool fetch(const std::string& client_version);

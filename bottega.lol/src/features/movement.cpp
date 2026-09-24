@@ -1,4 +1,5 @@
 #include "movement.h"
+#include "check.h"
 #include "mem.h"
 #include "offsets.h"
 #include "rbx.h"
@@ -13,6 +14,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 
@@ -100,17 +102,38 @@ static bool gate(int index, bool enabled, int key, int mode)
 {
     static bool toggled[G_COUNT]{};
     static bool was_down[G_COUNT]{};
+    static bool last_enabled[G_COUNT]{};
+    static int  last_mode[G_COUNT]{};
 
     const int slot = index % G_COUNT;
 
     if (!enabled)
     {
-        was_down[slot] = key_down(key);
+        was_down[slot] = false;
         toggled[slot] = false;
+        last_enabled[slot] = false;
         return false;
     }
 
-    if (mode == 2 || key == 0) return true;
+    // entering toggle (or re-enabling the feature) while the key is already
+    // held must not count as a fresh press, otherwise toggle latches on.
+    if (!last_enabled[slot] || last_mode[slot] != mode)
+    {
+        toggled[slot] = false;
+        was_down[slot] = mode == 1 ? key_down(key) : false;
+        last_mode[slot] = mode;
+        last_enabled[slot] = true;
+    }
+
+    if (mode == 2) return true;
+
+    if (key == 0)
+    {
+        toggled[slot] = false;
+        return mode == 0; // hold with no key = always-on, toggle with no key = off
+    }
+
+    if (check::blocked()) return false;
 
     const bool down = key_down(key);
     if (mode == 1)
@@ -139,32 +162,6 @@ static std::uintptr_t world_ptr()
     return mem::read<std::uintptr_t>(rbx::workspace + o_world);
 }
 
-static std::vector<std::uintptr_t> character_parts()
-{
-    std::vector<std::uintptr_t> out;
-    if (!local.character) return out;
-
-    static const char* r15_names[] = {
-        "HumanoidRootPart", "Head", "UpperTorso", "LowerTorso",
-        "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm", "RightHand",
-        "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot"
-    };
-    static const char* r6_names[] = {
-        "HumanoidRootPart", "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg"
-    };
-
-    const bool r6 = (rbx::find_child(local.character, "UpperTorso") == 0);
-    const char** names = r6 ? r6_names : r15_names;
-    const std::size_t count = r6 ? (sizeof(r6_names) / sizeof(*r6_names))
-                                 : (sizeof(r15_names) / sizeof(*r15_names));
-
-    for (std::size_t i = 0; i < count; ++i) {
-        if (std::uintptr_t p = rbx::find_child(local.character, names[i]))
-            out.push_back(p);
-    }
-    return out;
-}
-
 static void set_collide(std::uintptr_t part, bool collide)
 {
     if (!part || !o_prim_flags || !o_cancollide) return;
@@ -188,7 +185,7 @@ static void tick_walk()
     static float backup = 16.f;
     static std::uintptr_t backup_hum = 0;
 
-    if (gate(G_WALK, walk, walk_key, walk_mode) && local.humanoid && o_walk) {
+    if (gate(G_WALK, walk, 0, 2) && local.humanoid && o_walk) {
         if (!was || backup_hum != local.humanoid) {
             backup = mem::read<float>(local.humanoid + o_walk);
             if (!std::isfinite(backup) || backup <= 0.f) backup = 16.f;
@@ -214,7 +211,7 @@ static void tick_jump()
     static float backup_height = 7.2f;
     static std::uintptr_t backup_hum = 0;
 
-    if (gate(G_JUMP, jump, jump_key, jump_mode) && local.humanoid && o_jumph) {
+    if (gate(G_JUMP, jump, 0, 2) && local.humanoid && o_jumph) {
         const std::uintptr_t hum = local.humanoid;
         const bool use_power = (o_usejump && o_jump) ? mem::read<bool>(hum + o_usejump) : false;
 
@@ -251,7 +248,7 @@ static void tick_hip()
     static float last_written = -1.f;
     static std::uintptr_t backup_hum = 0;
 
-    if (gate(G_HIP, hip, hip_key, hip_mode) && local.humanoid && o_hip) {
+    if (gate(G_HIP, hip, 0, 2) && local.humanoid && o_hip) {
         if (!was || backup_hum != local.humanoid) {
             backup = mem::read<float>(local.humanoid + o_hip);
             if (!std::isfinite(backup) || backup < 0.f) backup = 2.f;
@@ -278,7 +275,7 @@ static void tick_gravity()
     static float backup = 196.2f;
 
     const std::uintptr_t world = world_ptr();
-    if (gate(G_GRAV, gravity, gravity_key, gravity_mode) && world && o_grav) {
+    if (gate(G_GRAV, gravity, 0, 2) && world && o_grav) {
         if (!was) {
             backup = mem::read<float>(world + o_grav);
             if (!std::isfinite(backup) || backup <= 0.f) backup = 196.2f;
@@ -297,7 +294,7 @@ static void tick_fov()
     static bool was = false;
     static float backup = 70.f;
 
-    if (gate(G_FOV, fov, fov_key, fov_mode) && rbx::camera && o_fov) {
+    if (gate(G_FOV, fov, 0, 2) && rbx::camera && o_fov) {
         if (!was) {
             backup = mem::read<float>(rbx::camera + o_fov);
             if (!std::isfinite(backup) || backup <= 0.f) backup = 70.f;
@@ -318,7 +315,7 @@ static void tick_bhop()
     static std::uintptr_t backup_hum = 0;
 
     const bool space = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
-    if (gate(G_BHOP, bhop, bhop_key, bhop_mode) && space && local.humanoid && o_walk) {
+    if (gate(G_BHOP, bhop, 0, 2) && space && local.humanoid && o_walk) {
         if (!was || backup_hum != local.humanoid) {
             backup = mem::read<float>(local.humanoid + o_walk);
             if (!std::isfinite(backup) || backup <= 0.f) backup = 16.f;
@@ -338,152 +335,254 @@ static void tick_bhop()
     }
 }
 
-static void tick_noclip()
+static std::atomic<bool> nc_stop{ false };
+static std::thread nc_thread;
+
+static void noclip_worker()
 {
-    static bool was = false;
-    static std::uintptr_t built_for = 0;
-    static std::vector<std::uintptr_t> parts{};
+    // dedicated high-frequency writer: the game re-asserts CanCollide every
+    // physics tick, so a lone per-frame write loses the race and the shift
+    // mode (hold/toggle/always) makes no difference. remember the original
+    // state of every part and restore exactly that on deactivate.
+    bool was = false;
+    std::uintptr_t saved_for = 0;
+    std::unordered_map<std::uintptr_t, bool> saved;
 
-    if (gate(G_NOCLIP, noclip, noclip_key, noclip_key_mode) && local.character) {
-        if (!was || built_for != local.character) {
-            parts = character_parts();
-            built_for = local.character;
+    // live top-of-chain: 0 once the local character is removed/destroyed.
+    auto current_character = []() -> std::uintptr_t {
+        const std::uintptr_t lpx = rbx::fresh_local_player();
+        return lpx ? mem::read<std::uintptr_t>(lpx + off::ModelInstance) : 0;
+        };
+
+    auto restore_originals = [&] {
+        // only restore parts that are still reachable under the same live
+        // character. when the character is destroyed (match end) the primitives
+        // are already gone; writing the saved flags back would corrupt whatever
+        // the game allocated over the freed objects.
+        if (saved_for && saved_for == current_character())
+            for (const auto& entry : saved)
+                set_collide(entry.first, entry.second);
+        saved.clear();
+        saved_for = 0;
+        };
+
+    while (!nc_stop.load(std::memory_order_acquire))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
+        const std::uintptr_t lp = rbx::fresh_local_player();
+        const std::uintptr_t ch = lp ? mem::read<std::uintptr_t>(lp + off::ModelInstance) : 0;
+        if (!gate(G_NOCLIP, noclip, noclip_key, noclip_key_mode) || !ch)
+        {
+            if (was) restore_originals();
+            was = false;
+            saved_for = 0;
+            continue;
         }
 
-        if (noclip_mode == 1) {
-            if (local.hrp) set_collide(local.hrp, false);
+        if (!was || saved_for != ch)
+        {
+            restore_originals();
+            saved_for = ch;
+            for (const std::uintptr_t part : rbx::children(ch)) {
+                if (!part || !o_prim_flags || !o_cancollide) continue;
+                const std::uintptr_t prim = mem::read<std::uintptr_t>(part + off::Primitive);
+                if (!prim) continue;
+                const std::uint8_t flags = mem::read<std::uint8_t>(prim + o_prim_flags);
+                saved[part] = (flags & static_cast<std::uint8_t>(o_cancollide)) != 0;
+            }
         }
-        else {
-            for (auto p : parts) set_collide(p, false);
+
+        if (noclip_mode == 1)
+        {
+            if (const std::uintptr_t hrp = rbx::find_child(ch, "HumanoidRootPart"))
+                set_collide(hrp, false);
+        }
+        else
+        {
+            for (const auto& entry : saved)
+                set_collide(entry.first, false);
         }
         was = true;
     }
-    else if (was) {
-        for (auto p : parts) set_collide(p, true);
-        parts.clear();
-        built_for = 0;
-        was = false;
-    }
+
+    restore_originals();
 }
 
-static void tick_fly()
+static void ensure_noclip()
 {
-    static bool was = false;
-    static bool grav_over = false;
-    static float grav_backup = 0.f;
-    static Vec3 cur_vel{};
-    static auto last = std::chrono::steady_clock::now();
+    if (nc_thread.joinable()) return;
+    nc_stop.store(false, std::memory_order_release);
+    nc_thread = std::thread(noclip_worker);
+}
 
-    auto restore_gravity = [&] {
-        if (grav_over) {
-            if (const std::uintptr_t world = world_ptr())
-                mem::write<float>(world + o_grav, grav_backup);
-            grav_over = false;
-        }
+struct Mat3
+{
+    float m[9]{};
+};
+
+static Vec3 rot_mul(const Mat3& r, const Vec3& v)
+{
+    // Roblox stores the CFrame rotation row-major, so the columns are the
+    // right/up/back basis vectors and a column-vector multiply maps a local
+    // move direction into world space.
+    return {
+        r.m[0] * v.x + r.m[1] * v.y + r.m[2] * v.z,
+        r.m[3] * v.x + r.m[4] * v.y + r.m[5] * v.z,
+        r.m[6] * v.x + r.m[7] * v.y + r.m[8] * v.z,
     };
+}
 
-    const auto now = std::chrono::steady_clock::now();
-    float dt = std::chrono::duration<float>(now - last).count();
-    last = now;
-    if (!(dt >= 0.0001f)) dt = 0.0001f;
+static Vec3 vec3_normalized(const Vec3& v)
+{
+    const float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    if (len < 1e-6f) return v;
+    return { v.x / len, v.y / len, v.z / len };
+}
 
-    const bool active = gate(G_FLY, fly, fly_key, fly_mode) && local.prim && rbx::camera;
+static std::atomic<bool> fly_stop{ false };
+static std::thread fly_thread;
 
-    if (!active) {
-        if (was && local.prim && o_vel) {
-            mem::write<Vec3>(local.prim + o_vel, Vec3{ 0.f, 0.f, 0.f });
-            if (o_angvel) mem::write<Vec3>(local.prim + o_angvel, Vec3{ 0.f, 0.f, 0.f });
-        }
-        cur_vel = Vec3{};
-        was = false;
-        fly_active = false;
-        restore_gravity();
-        return;
-    }
-
-    was = true;
-    fly_active = true;
-
-    if (!grav_over) {
-        if (const std::uintptr_t world = world_ptr()) {
-            grav_backup = mem::read<float>(world + o_grav);
-            grav_over = true;
-        }
-    }
-    if (grav_over) {
+static void fly_restore_gravity()
+{
+    if (o_grav)
         if (const std::uintptr_t world = world_ptr())
-            mem::write<float>(world + o_grav, 0.f);
-    }
+            mem::write<float>(world + o_grav, 196.2f);
+}
 
-    float rot[9]{};
-    if (o_cam_rot) {
-        for (int i = 0; i < 9; ++i)
-            rot[i] = mem::read<float>(rbx::camera + o_cam_rot + static_cast<std::uint64_t>(i) * sizeof(float));
-    }
+static void fly_worker()
+{
+    // the game re-asserts velocity/position against external writes, so each
+    // tick spams the write a pile of times to out-race the re-assert.
+    constexpr float k_speed = 100.0f;
+    constexpr int k_spam = 2500;
+    bool was_active = false;
 
-    Vec3 fwd{ -rot[2], -rot[5], -rot[8] };
-    Vec3 right{ -rot[0], rot[3], -rot[6] };
-
-    auto norm = [](Vec3& v, const Vec3& fallback) {
-        const float m = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
-        if (m < 1e-6f) { v = fallback; return; }
-        v.x /= m; v.y /= m; v.z /= m;
-    };
-    norm(fwd, Vec3{ 0.f, 0.f, 1.f });
-    norm(right, Vec3{ 1.f, 0.f, 0.f });
-
-    fwd.y = 0.f;
-    norm(fwd, Vec3{ 0.f, 0.f, 1.f });
-
-    const float spd = (std::max)(fly_speed, 0.f);
-    const float vspd = spd * fly_vertical;
-    Vec3 target{};
-
-    if (roblox_focused()) {
-        auto kd = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
-        if (kd('W')) target = target + fwd * spd;
-        if (kd('S')) target = target - fwd * spd;
-        if (kd('A')) target = target + right * spd;
-        if (kd('D')) target = target - right * spd;
-
-        float vert = 0.f;
-        if (kd(VK_SPACE)) vert += 1.f;
-        if (kd(VK_CONTROL)) vert -= 1.f;
-        if (vert != 0.f) target = target + Vec3{ 0.f, 1.f, 0.f } * (vert * vspd);
-    }
-
-    const float damping = (std::max)(fly_damping, 0.f);
-    const float cdt = std::clamp(dt, 0.001f, 0.05f);
-    if (damping > 0.f) {
-        const float alpha = 1.0f - std::exp(-damping * cdt);
-        cur_vel = cur_vel + (target - cur_vel) * alpha;
-    }
-    else {
-        cur_vel = target;
-    }
-
-    if (o_vel) mem::write<Vec3>(local.prim + o_vel, cur_vel);
-    if (o_angvel) mem::write<Vec3>(local.prim + o_angvel, Vec3{ 0.f, 0.f, 0.f });
-
-    // throttled flight diagnostic: one line per second while active showing the
-    // resolved primitive, the gravity value actually in world, the movement
-    // vectors and whether the write target is being applied.
-    static auto diag_last = std::chrono::steady_clock::now();
-    if (now - diag_last >= std::chrono::seconds(1))
+    while (!fly_stop.load(std::memory_order_acquire))
     {
-        diag_last = now;
-        const Vec3 pos = (local.prim && off::Position)
-            ? mem::read<Vec3>(local.prim + off::Position) : Vec3{};
-        float g = 0.f;
-        if (const std::uintptr_t world = world_ptr())
-            g = mem::read<float>(world + o_grav);
-        printf("[fly] prim %llX vel %llX grav %llX cam %llX worldgrav %.1f fwd %.2f %.2f %.2f rgt %.2f %.2f %.2f tgt %.2f %.2f %.2f cur %.2f %.2f %.2f pos %.2f %.2f %.2f\n",
-            (unsigned long long)local.prim, (unsigned long long)o_vel, (unsigned long long)o_grav,
-            (unsigned long long)rbx::camera, g,
-            fwd.x, fwd.y, fwd.z, right.x, right.y, right.z,
-            target.x, target.y, target.z, cur_vel.x, cur_vel.y, cur_vel.z, pos.x, pos.y, pos.z);
-        fflush(stdout);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        const bool active = gate(G_FLY, fly, fly_key, fly_mode) && rbx::camera;
+        if (!active)
+        {
+            if (was_active)
+            {
+                fly_restore_gravity();
+                was_active = false;
+                fly_active = false;
+            }
+            continue;
+        }
+        was_active = true;
+        fly_active = true;
+
+        const std::uintptr_t lp = rbx::fresh_local_player();
+        const std::uintptr_t ch = lp ? mem::read<std::uintptr_t>(lp + off::ModelInstance) : 0;
+        const std::uintptr_t hrp = ch ? rbx::find_child(ch, "HumanoidRootPart") : 0;
+        const std::uintptr_t prim = hrp ? mem::read<std::uintptr_t>(hrp + off::Primitive) : 0;
+        if (!prim || !off::Position) continue;
+
+        // during a 2500-write burst the character can be destroyed and its parts
+        // freed (match end); re-check the live chain every so often and abort so
+        // we never keep spraying a recycled instance.
+        auto chain_alive = [&]() {
+            const std::uintptr_t lpx = rbx::fresh_local_player();
+            if (!lpx) return false;
+            return mem::read<std::uintptr_t>(lpx + off::ModelInstance) != 0;
+        };
+
+        Mat3 rotation{};
+        if (o_cam_rot) {
+            if (const std::uintptr_t fc = rbx::fresh_camera())
+                rotation = mem::read<Mat3>(fc + o_cam_rot);
+        }
+
+        auto kd = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+        Vec3 move{ 0.f, 0.f, 0.f };
+        bool is_moving = false;
+        if (kd('W')) { move.z -= 1.f; is_moving = true; }
+        if (kd('S')) { move.z += 1.f; is_moving = true; }
+        if (kd('A')) { move.x -= 1.f; is_moving = true; }
+        if (kd('D')) { move.x += 1.f; is_moving = true; }
+        if (kd(VK_SPACE)) { move.y += 1.f; is_moving = true; }
+        if (kd(VK_LCONTROL)) { move.y -= 1.f; is_moving = true; }
+
+        const Vec3 current_position = mem::read<Vec3>(prim + off::Position);
+
+        if (!is_moving)
+        {
+            // no input: hold the character in place against gravity/physics.
+            if (fly_flight == 0 && o_grav)
+            {
+                if (const std::uintptr_t world = world_ptr())
+                    mem::write<float>(world + o_grav, 0.f);
+            }
+            for (int i = 0; i < k_spam; ++i)
+            {
+                if ((i & 255) == 0 && !chain_alive()) break;
+                mem::write<Vec3>(prim + off::Position, current_position);
+                if (o_vel)
+                    mem::write<Vec3>(prim + o_vel, Vec3{ 0.f, 0.f, 0.f });
+            }
+            continue;
+        }
+
+        move = vec3_normalized(move);
+        const Vec3 dir = rot_mul(rotation, move);
+
+        if (fly_flight == 0)
+        {
+            if (o_grav)
+            {
+                if (const std::uintptr_t world = world_ptr())
+                    mem::write<float>(world + o_grav, 0.f);
+            }
+            const Vec3 new_velocity = dir * k_speed;
+            for (int i = 0; i < k_spam; ++i)
+            {
+                if ((i & 255) == 0 && !chain_alive()) break;
+                if (o_vel)
+                    mem::write<Vec3>(prim + o_vel, new_velocity);
+                if (o_angvel)
+                    mem::write<Vec3>(prim + o_angvel, Vec3{ 0.f, 0.f, 0.f });
+            }
+        }
+        else if (fly_flight == 1)
+        {
+            const Vec3 new_position = current_position + (dir * (k_speed / 165.0f));
+            for (int i = 0; i < k_spam; ++i)
+            {
+                if ((i & 255) == 0 && !chain_alive()) break;
+                mem::write<Vec3>(prim + off::Position, new_position);
+                if (o_vel)
+                    mem::write<Vec3>(prim + o_vel, Vec3{ 0.f, 0.f, 0.f });
+            }
+        }
+        else
+        {
+            const Mat3 current_rotation = mem::read<Mat3>(prim + o_prim_rot);
+            const Vec3 new_position = current_position + (dir * (k_speed / 165.0f));
+            for (int i = 0; i < k_spam; ++i)
+            {
+                if ((i & 255) == 0 && !chain_alive()) break;
+                mem::write<Vec3>(prim + off::Position, new_position);
+                if (o_prim_rot)
+                    mem::write<Mat3>(prim + o_prim_rot, current_rotation);
+                if (o_vel)
+                    mem::write<Vec3>(prim + o_vel, Vec3{ 0.f, 0.f, 0.f });
+            }
+        }
     }
+
+    fly_restore_gravity();
+    fly_active = false;
+}
+
+static void ensure_fly()
+{
+    if (fly_thread.joinable()) return;
+    fly_stop.store(false, std::memory_order_release);
+    fly_thread = std::thread(fly_worker);
 }
 
 
@@ -524,6 +623,17 @@ static void cframe_to_pitch_yaw(const CFrame& cf, float& pitch, float& yaw)
     pitch = std::atan2(-cf.d[5], cf.d[4]);
 }
 
+// cache-free check that `humanoid` is still a child of the given character, so
+// freecam never keeps writing to a stale humanoid after the character is
+// destroyed and replaced (cached lookups would return the freed snapshot).
+static bool character_owns_humanoid(std::uintptr_t character, std::uintptr_t humanoid)
+{
+    if (!character || !humanoid) return false;
+    for (const std::uintptr_t c : rbx::children(character))
+        if (c == humanoid) return true;
+    return false;
+}
+
 static void cam_loop()
 {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
@@ -543,21 +653,26 @@ static void cam_loop()
             player = cam_player_cframe;
         }
 
-        if (rbx::workspace && o_cam_rot) {
-            const std::uintptr_t cam = mem::read<std::uintptr_t>(rbx::workspace + off::Camera);
-            if (cam) {
-                if (o_cam_type) mem::write<int>(cam + o_cam_type, 6);
-                if (o_cam_subj) mem::write<std::uintptr_t>(cam + o_cam_subj, 0);
-                mem::write<CFrame>(cam + o_cam_rot, target);
-            }
+        if (const std::uintptr_t cam = rbx::fresh_camera()) {
+            if (o_cam_type) 
+                mem::write<int>(cam + o_cam_type, 6);
+            if (o_cam_subj) 
+                mem::write<std::uintptr_t>(cam + o_cam_subj, 0);
+            mem::write<CFrame>(cam + o_cam_rot, target);
         }
 
         if (freeze) {
-            if (hum && o_walk) {
+            // the local character may have been destroyed (match end); only
+            // keep freezing it while the same live character is still up.
+            const std::uintptr_t lpx = rbx::fresh_local_player();
+            const std::uintptr_t cur_ch = (lpx && hum) ? mem::read<std::uintptr_t>(lpx + off::ModelInstance) : 0;
+            const bool char_alive = cur_ch != 0 && character_owns_humanoid(cur_ch, hum);
+
+            if (char_alive && hum && o_walk) {
                 mem::write<float>(hum + o_walk, 0.f);
                 if (o_walkchk) mem::write<float>(hum + o_walkchk, 0.f);
             }
-            if (prim && o_prim_rot) {
+            if (char_alive && prim && o_prim_rot) {
                 mem::write<CFrame>(prim + o_prim_rot, player);
                 if (o_vel) mem::write<Vec3>(prim + o_vel, Vec3{});
                 if (o_prim_flags && o_anchored) {
@@ -577,13 +692,22 @@ static void freecam_stop()
     cam_running.store(false);
     if (cam_thread.joinable()) cam_thread.join();
 
-    if (rbx::workspace && rbx::camera && o_cam_rot) {
-        if (o_cam_type) mem::write<int>(rbx::camera + o_cam_type, cam_saved_type);
-        if (o_cam_subj) mem::write<std::uintptr_t>(rbx::camera + o_cam_subj, cam_saved_subject);
-        mem::write<CFrame>(rbx::camera + o_cam_rot, cam_saved_cframe);
+    // only restore when the camera still exists; after a match-end teardown the
+    // cached rbx::camera is a freed object and writing the saved cframe back
+    // would corrupt recycled game memory.
+    if (const std::uintptr_t cam = rbx::fresh_camera()) {
+        if (o_cam_type) mem::write<int>(cam + o_cam_type, cam_saved_type);
+        if (o_cam_subj) mem::write<std::uintptr_t>(cam + o_cam_subj, cam_saved_subject);
+        if (o_cam_rot)  mem::write<CFrame>(cam + o_cam_rot, cam_saved_cframe);
     }
 
-    if (cam_prim && o_prim_flags && o_anchored) {
+    const std::uintptr_t cur_ch = [&]() -> std::uintptr_t {
+        const std::uintptr_t lpx = rbx::fresh_local_player();
+        return lpx ? mem::read<std::uintptr_t>(lpx + off::ModelInstance) : 0;
+        }();
+    const bool char_same = cam_prim != 0 && cur_ch != 0 && character_owns_humanoid(cur_ch, cam_hum);
+
+    if (char_same && cam_prim && o_prim_flags && o_anchored) {
         std::uint8_t flags = mem::read<std::uint8_t>(cam_prim + o_prim_flags);
         if (cam_player_anchored)
             flags = static_cast<std::uint8_t>(flags | static_cast<std::uint8_t>(o_anchored));
@@ -593,7 +717,7 @@ static void freecam_stop()
         if (o_vel) mem::write<Vec3>(cam_prim + o_vel, Vec3{});
     }
 
-    if (cam_hum && o_walk) {
+    if (char_same && cam_hum && o_walk) {
         mem::write<float>(cam_hum + o_walk, cam_saved_walk);
         if (o_walkchk) mem::write<float>(cam_hum + o_walkchk, cam_saved_walkchk);
     }
@@ -839,8 +963,8 @@ void update()
     tick_gravity();
     tick_fov();
     tick_bhop();
-    tick_noclip();
-    tick_fly();
+    ensure_noclip();
+    ensure_fly();
     tick_freecam();
     tick_teleport();
 }
@@ -849,6 +973,12 @@ void shutdown()
 {
     tp_active = false;
     tp_prim = 0;
+
+    fly_stop.store(true, std::memory_order_release);
+    if (fly_thread.joinable()) fly_thread.join();
+
+    nc_stop.store(true, std::memory_order_release);
+    if (nc_thread.joinable()) nc_thread.join();
 
     if (cam_running.load())
         freecam_stop();

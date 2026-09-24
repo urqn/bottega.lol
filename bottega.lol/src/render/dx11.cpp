@@ -33,6 +33,9 @@ namespace dx11 {
         swap_chain->GetBuffer(0, IID_PPV_ARGS(&back_buffer));
         if (!back_buffer) { printf("[-] swapchain back buffer\n"); return false; }
 
+        D3D11_TEXTURE2D_DESC bb_desc{};
+        back_buffer->GetDesc(&bb_desc);
+
         D3D11_RENDER_TARGET_VIEW_DESC rtv{};
         rtv.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
         rtv.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
@@ -41,12 +44,32 @@ namespace dx11 {
         back_buffer->Release();
 
         if (!render_target) { printf("[-] create render target\n"); return false; }
+
+        // depth buffer that only the native-cham 3D pass uses; cleared each frame
+        // so per-part boxes occlude themselves correctly (pixel perfect).
+        D3D11_TEXTURE2D_DESC dd{};
+        dd.Width = bb_desc.Width;
+        dd.Height = bb_desc.Height;
+        dd.MipLevels = 1;
+        dd.ArraySize = 1;
+        dd.Format = DXGI_FORMAT_D32_FLOAT;
+        dd.SampleDesc.Count = 1;
+        dd.SampleDesc.Quality = 0;
+        dd.Usage = D3D11_USAGE_DEFAULT;
+        dd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+
+        if (SUCCEEDED(device->CreateTexture2D(&dd, nullptr, &depth_texture)) && depth_texture)
+            device->CreateDepthStencilView(depth_texture, nullptr, &depth_view);
+
+        if (!depth_view) { printf("[-] create depth view\n"); return false; }
         return true;
     }
 
     void cleanup_render_target()
     {
         if (render_target) { render_target->Release(); render_target = nullptr; }
+        if (depth_view) { depth_view->Release(); depth_view = nullptr; }
+        if (depth_texture) { depth_texture->Release(); depth_texture = nullptr; }
     }
 
     bool create(HWND hwnd)

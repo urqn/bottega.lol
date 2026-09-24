@@ -8,14 +8,13 @@ External cheat overlay for Roblox. Reads game state with `ReadProcessMemory` / `
 
 ---
 
-
 ## Features
 
 
 **Aimbot** — FOV circle, smoothness, hit-part selection, mouse / memory methods, projectile prediction, auto fire (delay + trigger FOV), repositions in real time, silent aim with viewport / raycast methods, magic bullet, tracer.
 
 
-**ESP** — boxes (static / dynamic, bounding / corner, filled and gradient modes), names, distance, health bars, skeleton (thickness + outline), head dot, view direction, tool in hand, flags, friendly check, self ESP, max distance.
+**ESP** — boxes (**reworked**: Bounding / Corner / 3D modes), **added**: Bounding type (Parts / Mesh) that controls how the box hugs the player — *Parts* uses the limb collision boxes (arms, legs, torso) while *Mesh* uses the full model mesh bounds including hair and accessories; filled and gradient modes, outline, thickness, names, distance, health bars, skeleton (thickness + outline), head dot, view direction, tool in hand, flags, friendly check, self ESP, max distance.
 
 
 **Movement** — walk speed, jump power, hip height, gravity, FOV changer, bunny hop, noclip (all parts / root only), fly (speed, vertical boost, damping).
@@ -27,11 +26,10 @@ External cheat overlay for Roblox. Reads game state with `ReadProcessMemory` / `
 **Players** — searchable player list, spectate, teleport to player.
 
 
-**Misc** — config system (create / save / load / reset), team check, dead check, watermark, streamproof, vertical sync, fully customizable theme.
+**Misc** — config system (create / save / load / reset), team check, dead check, watermark (**reworked**: white accent & clean menu theme), streamproof, vertical sync, fully customizable theme (**reworked**: factory-default white accent, reset restores stock colors).
 
 
 ---
-
 
 ## Building
 
@@ -52,7 +50,6 @@ build\bottega.lol.exe
 
 ---
 
-
 ## Usage
 
 
@@ -72,7 +69,6 @@ Configurations are stored as `.cfg` files in `C:\bottega\configs\` and can be cr
 
 ---
 
-
 ## Offsets
 
 
@@ -86,7 +82,6 @@ Offsets go stale every time Roblox ships a client build. Updated offsets are rel
 
 
 ---
-
 
 ## Disclaimer
 

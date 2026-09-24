@@ -124,7 +124,11 @@ static LRESULT CALLBACK ll_keyboard_proc(int code, WPARAM wparam, LPARAM lparam)
 {
 if (code == HC_ACTION && hwnd)
     {
-        mark_input();
+        // only wake the render loop for input that involves the menu. raw game
+        // keys with the menu closed would otherwise re-arm the 200ms full-rate
+        // boost on every press and pin the esp overlay to the monitor's native
+        // refresh rate for the whole session (huge wasted gpu on top of the game).
+        if (menu_open) mark_input();
 
         const auto* kb = reinterpret_cast<KBDLLHOOKSTRUCT*>(lparam);
         const UINT msg = (wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN) ? WM_KEYDOWN : WM_KEYUP;
@@ -136,7 +140,7 @@ if (code == HC_ACTION && hwnd)
         // stale/missing target hwnd or an ambiguous foreground window leaves the
         // menu stuck open with no way back. modifier combos (ctrl+insert / alt /
         // win+insert) pass through untouched so OS shortcuts still fire.
-        if (kb->vkCode == VK_INSERT && msg == WM_KEYDOWN)
+        if (menu_key && kb->vkCode == static_cast<UINT>(menu_key) && msg == WM_KEYDOWN)
         {
             const bool win  = (GetAsyncKeyState(VK_LWIN)  & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN)  & 0x8000) != 0;
             const bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -521,8 +525,11 @@ void end_frame()
     ImGui::Render();
 
     const float clear[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    dx11::context->OMSetRenderTargets(1, &dx11::render_target, nullptr);
+    dx11::context->OMSetRenderTargets(1, &dx11::render_target, dx11::depth_view);
     dx11::context->ClearRenderTargetView(dx11::render_target, clear);
+    if (dx11::depth_view)
+        dx11::context->ClearDepthStencilView(dx11::depth_view, D3D11_CLEAR_DEPTH, 1.0f, 0);
+
     dx11::context->OMSetBlendState(dx11::blend_state, nullptr, 0xFFFFFFFF);
 
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

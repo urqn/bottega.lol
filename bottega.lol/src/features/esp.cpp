@@ -3,13 +3,17 @@
 #include "mem.h"
 #include "offsets.h"
 #include "overlay.h"
+#include "mesh_esp.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 
 namespace esp {
@@ -30,6 +34,7 @@ static ImU32 to_col(std::uint32_t c) { return static_cast<ImU32>(c); }
 
 static bool valid(const Vec3& p) { return p.x != 0.f || p.y != 0.f || p.z != 0.f; }
 
+// ── Limb cache ──────────────────────────────────────────────────────────────
 struct Limbs {
     std::uintptr_t head{}, hrp{}, torso{}, upper_torso{}, lower_torso{};
     std::uintptr_t l_arm{}, r_arm{}, l_leg{}, r_leg{};
@@ -37,37 +42,86 @@ struct Limbs {
     std::uintptr_t l_upper_leg{}, l_lower_leg{}, l_foot{}, r_upper_leg{}, r_lower_leg{}, r_foot{};
     std::string tool{};
     bool r6{};
-    int  stamp{ -1 };
+    ULONGLONG stamp = 0;
 };
 
 static std::unordered_map<std::uintptr_t, Limbs> limb_cache;
-static std::unordered_map<std::uintptr_t, std::pair<int, Vec3>> pos_cache;
-static int frame_stamp = 0;
-static constexpr int k_pos_fresh = 2; // ~30Hz at a 60fps render loop
+static ULONGLONG g_now = 0;                        // ms clock, refreshed each draw pass
+static constexpr ULONGLONG k_pos_fresh_ms  = 33;   // part geometry TTL (~30 Hz, fps-independent)
+static constexpr ULONGLONG k_limb_fresh_ms = 600;  // limb re-scan TTL
+
+// ── Part data cache ─────────────────────────────────────────────────────────
+// All 9 rotation floats + pos + size are fetched in two bulk RPMs instead of
+// 11 separate ReadProcessMemory calls (9× floats + pos + size previously).
+struct PartData {
+    ULONGLONG stamp = 0;
+    std::uintptr_t prim = 0;
+    Vec3 pos{};
+    Vec3 sz{ 1.f, 1.f, 1.f };
+    float rot[9]{ 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+    Vec3 vel{};      // cached once; only populated when flags/view_dir is on
+    bool vel_valid = false;
+};
+static std::unordered_map<std::uintptr_t, PartData> part_cache;
+
+// Primitive layout: Position(vec3 @+0) then immediately Size(vec3 @+12) then
+// Rotation (9 floats @+24) — 60 bytes total read in one RPM.
+// If your offsets layout is different, adjust k_prim_block_size.
+static constexpr std::size_t k_prim_pos_off  = 0;
+static constexpr std::size_t k_prim_sz_off   = 12;
+static constexpr std::size_t k_prim_rot_off  = 24;
+static constexpr std::size_t k_prim_block_sz = 24 + 9 * 4; // 60 bytes
+
+static const PartData* part_data(std::uintptr_t part)
+{
+    if (!part || !off::Primitive || !off::Position) return nullptr;
+
+    PartData& pd = part_cache[part];
+    if (pd.stamp && g_now - pd.stamp < k_pos_fresh_ms)
+        return &pd;
+
+    pd.stamp     = g_now;
+    pd.vel_valid = false;
+    pd.prim = mem::read<std::uintptr_t>(part + off::Primitive);
+    if (!pd.prim) return &pd;
+
+    // Bulk-read pos + size + rot in one syscall if offsets are contiguous.
+    // Falls back to individual reads if they're not adjacent.
+    const bool contiguous = off::Size     == (off::Position + 12) &&
+                            off::Rotation == (off::Position + 24);
+    if (contiguous) {
+        struct PrimBlock { float pos[3]; float sz[3]; float rot[9]; };
+        PrimBlock blk{};
+        if (mem::read_block(pd.prim + off::Position, &blk, sizeof(blk))) {
+            pd.pos = Vec3{ blk.pos[0], blk.pos[1], blk.pos[2] };
+            pd.sz  = Vec3{ blk.sz[0],  blk.sz[1],  blk.sz[2]  };
+            std::memcpy(pd.rot, blk.rot, sizeof(pd.rot));
+            return &pd;
+        }
+    }
+
+    // Non-contiguous fallback: two RPMs (pos+size together if adjacent, else three)
+    pd.pos = mem::read<Vec3>(pd.prim + off::Position);
+    if (off::Size)
+        pd.sz = mem::read<Vec3>(pd.prim + off::Size);
+    if (off::Rotation) {
+        // 9 floats in one RPM instead of 9 separate reads
+        mem::read_block(pd.prim + off::Rotation, pd.rot, 9 * sizeof(float));
+    }
+    return &pd;
+}
 
 void invalidate()
 {
     limb_cache.clear();
-    pos_cache.clear();
-    frame_stamp = 0;
+    part_cache.clear();
+    g_now = 0;
 }
 
-// part positions are cached for a couple of frames so the render loop does not
-// re-read the whole limb set of every player every frame. at ~30Hz the boxes
-// stay glued to the model but the memory read storm is gone.
 static Vec3 part_pos(std::uintptr_t part)
 {
-    if (!part || !off::Primitive || !off::Position) return {};
-
-    auto it = pos_cache.find(part);
-    if (it != pos_cache.end() && frame_stamp - it->second.first < k_pos_fresh)
-        return it->second.second;
-
-    std::uintptr_t prim = mem::read<std::uintptr_t>(part + off::Primitive);
-    Vec3 p{};
-    if (prim) p = mem::read<Vec3>(prim + off::Position);
-    pos_cache[part] = { frame_stamp, p };
-    return p;
+    const PartData* pd = part_data(part);
+    return pd ? pd->pos : Vec3{};
 }
 
 static Limbs limbs_of(std::uintptr_t character)
@@ -77,14 +131,14 @@ static Limbs limbs_of(std::uintptr_t character)
 
     Limbs& l = limb_cache[character];
 
-    const bool stale = (l.stamp < 0) || (frame_stamp - l.stamp > 60) ||
-                       (!l.head || !l.hrp) || (!valid(part_pos(l.head)) && !valid(part_pos(l.hrp)));
-
+    // Stale check: use stamp age only — no extra part_pos RPM every frame.
+    const bool stale = (l.stamp == 0) || (g_now - l.stamp > k_limb_fresh_ms) ||
+                       (!l.head || !l.hrp);
     if (!stale)
         return l;
 
     l = Limbs{};
-    l.stamp = frame_stamp;
+    l.stamp = g_now;
 
     l.head = rbx::find_child(character, "Head");
     l.hrp  = rbx::find_child(character, "HumanoidRootPart");
@@ -120,22 +174,34 @@ static Limbs limbs_of(std::uintptr_t character)
     return l;
 }
 
+// ── Draw helpers ─────────────────────────────────────────────────────────────
+
+// outlined_text: drop shadow + main = 2 draws instead of a 5-pass halo; the
+// cheap shadow is plenty for the small ESP labels and roughly halves the text
+// vertex volume per player (adds up fast with many players / flags).
+static void outlined_text(ImDrawList* dl, const ImVec2& pos, const char* text, ImU32 col)
+{
+    if (!text || !*text) return;
+    ImFont* f = font();
+    const ImU32 shadow = IM_COL32(0, 0, 0, 255);
+    dl->AddText(f, font_size, ImVec2{ pos.x + 1.f, pos.y + 1.f }, shadow, text);
+    dl->AddText(f, font_size, pos,                           col,    text);
+}
 
 static void outlined_text(ImDrawList* dl, const ImVec2& pos, const std::string& text, ImU32 col)
 {
-    if (text.empty()) return;
-    ImFont* f = font();
-    dl->AddText(f, font_size, ImVec2{ pos.x - 1.f, pos.y }, IM_COL32(0, 0, 0, 255), text.c_str());
-    dl->AddText(f, font_size, ImVec2{ pos.x + 1.f, pos.y }, IM_COL32(0, 0, 0, 255), text.c_str());
-    dl->AddText(f, font_size, ImVec2{ pos.x, pos.y - 1.f }, IM_COL32(0, 0, 0, 255), text.c_str());
-    dl->AddText(f, font_size, ImVec2{ pos.x, pos.y + 1.f }, IM_COL32(0, 0, 0, 255), text.c_str());
-    dl->AddText(f, font_size, pos, col, text.c_str());
+    outlined_text(dl, pos, text.c_str(), col);
+}
+
+static ImVec2 text_size(const char* text)
+{
+    if (!text || !*text) return ImVec2{ 0.f, font_size };
+    return font()->CalcTextSizeA(font_size, FLT_MAX, 0.f, text);
 }
 
 static ImVec2 text_size(const std::string& text)
 {
-    if (text.empty()) return ImVec2{ 0.f, font_size };
-    return font()->CalcTextSizeA(font_size, FLT_MAX, 0.f, text.c_str());
+    return text_size(text.c_str());
 }
 
 static void line(ImDrawList* dl, const ImVec2& a, const ImVec2& b, ImU32 col, float t, bool outline)
@@ -199,9 +265,8 @@ static void render_skeleton(ImDrawList* dl, const Limbs& l, const Mat4& mv, floa
     const std::uintptr_t right_leg[] = { l.r_upper_leg, l.r_lower_leg, l.r_foot };
 
     auto chain = [&](const std::uintptr_t* c) {
-        for (int i = 0; i < 3; ++i) {
-            if (!c[i]) return;
-            if (i == 0) continue;
+        for (int i = 1; i < 3; ++i) {
+            if (!c[i - 1] || !c[i]) return;
             bone_addr(dl, c[i - 1], c[i], mv, sw, sh);
         }
     };
@@ -217,59 +282,6 @@ static void render_skeleton(ImDrawList* dl, const Limbs& l, const Mat4& mv, floa
     chain(right_leg);
 }
 
-static bool dynamic_bounds(const Limbs& l, const Mat4& mv, float sw, float sh,
-                           float& x0, float& x1, float& y0, float& y1)
-{
-    if (!l.head || !l.hrp) return false;
-
-    const Vec3 hp = part_pos(l.head);
-    const Vec3 rp = part_pos(l.hrp);
-    if (!valid(hp) || !valid(rp)) return false;
-
-    const bool r6 = l.r6;
-    Vec3 pts[20];
-    int n = 0;
-    pts[n++] = Vec3{ hp.x, hp.y + 0.6f, hp.z };
-    pts[n++] = hp;
-
-    const std::uintptr_t extra[] = {
-        r6 ? l.torso : l.upper_torso, r6 ? l.l_arm : l.l_upper_arm, r6 ? l.r_arm : l.r_upper_arm,
-        r6 ? l.l_leg : l.l_upper_leg, r6 ? l.r_leg : l.r_upper_leg, r6 ? 0 : l.lower_torso,
-        r6 ? 0 : l.l_lower_arm, r6 ? 0 : l.l_hand, r6 ? 0 : l.r_lower_arm, r6 ? 0 : l.r_hand,
-        r6 ? 0 : l.l_lower_leg, r6 ? 0 : l.l_foot, r6 ? 0 : l.r_lower_leg, r6 ? 0 : l.r_foot
-    };
-
-    for (auto addr : extra) {
-        if (!addr || n >= 17) continue;
-        const Vec3 p = part_pos(addr);
-        if (!valid(p)) continue;
-        pts[n++] = p;
-    }
-
-    pts[n++] = rp;
-    pts[n++] = Vec3{ rp.x, rp.y - (r6 ? 3.0f : 2.5f), rp.z };
-
-    bool any = false;
-    float mnx = 1e9f, mxx = -1e9f, mny = 1e9f, mxy = -1e9f;
-    for (int i = 0; i < n; ++i) {
-        ImVec2 s{};
-        if (!w2s(pts[i], mv, sw, sh, s)) continue;
-        any = true;
-        mnx = (std::min)(mnx, s.x);
-        mxx = (std::max)(mxx, s.x);
-        mny = (std::min)(mny, s.y);
-        mxy = (std::max)(mxy, s.y);
-    }
-    if (!any) return false;
-
-    const float pad = std::clamp((mxy - mny) * 0.06f, 3.0f, 10.0f);
-    x0 = mnx - pad * 0.8f;
-    x1 = mxx + pad * 0.8f;
-    y0 = mny - pad;
-    y1 = mxy + pad;
-    return x1 > x0 && y1 > y0;
-}
-
 static void draw_box_fill(ImDrawList* dl, float x0, float y0, float x1, float y1)
 {
     if (!box_filled) return;
@@ -280,40 +292,162 @@ static void draw_box_fill(ImDrawList* dl, float x0, float y0, float x1, float y1
         dl->AddRectFilled(ImVec2{ x0, y0 }, ImVec2{ x1, y1 }, to_col(box_fill_color));
 }
 
-static void draw_corner_box(ImDrawList* dl, float x0, float y0, float x1, float y1, ImU32 col)
+// ── Box drawing ──────────────────────────────────────────────────────────────
+
+static void snap_box(float min_x, float min_y, float max_x, float max_y,
+                     float& x1, float& y1, float& x2, float& y2)
 {
-    const float w = x1 - x0;
-    const float h = y1 - y0;
-
-    float len = (w < h ? w : h) * 0.25f;
-    if (len < 3.0f) len = 3.0f;
-    if (len > w * 0.5f) len = w * 0.5f;
-    if (len > h * 0.5f) len = h * 0.5f;
-
-    for (int pass = 0; pass < 2; ++pass)
-    {
-        const ImU32 c = pass == 0 ? IM_COL32(0, 0, 0, 255) : col;
-        const float t = pass == 0 ? 3.0f : 1.0f;
-
-        dl->AddLine(ImVec2{ x0, y0 }, ImVec2{ x0 + len, y0 }, c, t);
-        dl->AddLine(ImVec2{ x0, y0 }, ImVec2{ x0, y0 + len }, c, t);
-
-        dl->AddLine(ImVec2{ x1, y0 }, ImVec2{ x1 - len, y0 }, c, t);
-        dl->AddLine(ImVec2{ x1, y0 }, ImVec2{ x1, y0 + len }, c, t);
-
-        dl->AddLine(ImVec2{ x0, y1 }, ImVec2{ x0 + len, y1 }, c, t);
-        dl->AddLine(ImVec2{ x0, y1 }, ImVec2{ x0, y1 - len }, c, t);
-
-        dl->AddLine(ImVec2{ x1, y1 }, ImVec2{ x1 - len, y1 }, c, t);
-        dl->AddLine(ImVec2{ x1, y1 }, ImVec2{ x1, y1 - len }, c, t);
-    }
+    x1 = std::floor(min_x);
+    y1 = std::floor(min_y);
+    x2 = std::ceil(max_x);
+    y2 = std::ceil(max_y);
+    if (x2 <= x1) x2 = x1 + 1.0f;
+    if (y2 <= y1) y2 = y1 + 1.0f;
 }
 
-static void draw_box(ImDrawList* dl, float x0, float y0, float x1, float y1, ImU32 col)
+static void draw_box_px(ImDrawList* dl, float x0, float y0, float x1, float y1, ImU32 col)
 {
-    dl->AddRect(ImVec2{ x0 - 1.f, y0 - 1.f }, ImVec2{ x1 + 1.f, y1 + 1.f }, IM_COL32(0, 0, 0, 255), 0.f, 0, 1.f);
-    dl->AddRect(ImVec2{ x0, y0 }, ImVec2{ x1, y1 }, col, 0.f, 0, 1.f);
-    dl->AddRect(ImVec2{ x0 + 1.f, y0 + 1.f }, ImVec2{ x1 - 1.f, y1 - 1.f }, IM_COL32(0, 0, 0, 255), 0.f, 0, 1.f);
+    float rx1, ry1, rx2, ry2;
+    snap_box(x0, y0, x1, y1, rx1, ry1, rx2, ry2);
+    const float t = (std::max)(box_thickness, 0.5f);
+
+    if (box_outline) {
+        if (t <= 1.01f) {
+            dl->AddRect(ImVec2(rx1 - 1.f, ry1 - 1.f), ImVec2(rx2 + 1.f, ry2 + 1.f),
+                IM_COL32(0, 0, 0, 255), 0.0f, 0, 1.0f);
+            dl->AddRect(ImVec2(rx1 + 1.f, ry1 + 1.f), ImVec2(rx2 - 1.f, ry2 - 1.f),
+                IM_COL32(0, 0, 0, 255), 0.0f, 0, 1.0f);
+        } else {
+            dl->AddRect(ImVec2(rx1, ry1), ImVec2(rx2, ry2),
+                IM_COL32(0, 0, 0, 255), 0.0f, 0, t + 2.0f);
+        }
+    }
+    dl->AddRect(ImVec2(rx1, ry1), ImVec2(rx2, ry2), col, 0.0f, 0, t);
+}
+
+static void draw_corner_box_px(ImDrawList* dl, float x0, float y0, float x1, float y1, ImU32 col)
+{
+    if (x1 <= x0 || y1 <= y0) return;
+
+    float rx1, ry1, rx2, ry2;
+    snap_box(x0, y0, x1, y1, rx1, ry1, rx2, ry2);
+    const float t = (std::max)(box_thickness, 0.5f);
+
+    float lw = std::floor((rx2 - rx1) * 0.25f);
+    float lh = std::floor((ry2 - ry1) * 0.25f);
+    if (lw < 2.f) lw = 2.f;
+    if (lh < 2.f) lh = 2.f;
+
+    struct Seg { ImVec2 a, b; };
+    const Seg segs[8] = {
+        { {rx1, ry1}, {rx1 + lw, ry1} }, { {rx1, ry1}, {rx1, ry1 + lh} },
+        { {rx2 - lw, ry1}, {rx2, ry1} }, { {rx2, ry1}, {rx2, ry1 + lh} },
+        { {rx1, ry2 - lh}, {rx1, ry2} }, { {rx1, ry2}, {rx1 + lw, ry2} },
+        { {rx2, ry2 - lh}, {rx2, ry2} }, { {rx2 - lw, ry2}, {rx2, ry2} },
+    };
+    if (box_outline) {
+        const float ot = t + 2.0f;
+        for (const auto& s : segs) dl->AddLine(s.a, s.b, IM_COL32(0, 0, 0, 255), ot);
+    }
+    for (const auto& s : segs) dl->AddLine(s.a, s.b, col, t);
+}
+
+inline constexpr int k_box_edges[12][2] = {
+    {0,1},{0,2},{0,4},{1,3},{1,5},{2,3},
+    {2,6},{3,7},{4,5},{4,6},{5,7},{6,7}
+};
+
+static void draw_box_3d_edges(ImDrawList* dl, const ImVec2 pts[8], ImU32 col)
+{
+    const float t = (std::max)(box_thickness, 0.5f);
+    if (box_outline) {
+        const float ot = t + 2.0f;
+        for (const auto& e : k_box_edges)
+            dl->AddLine(pts[e[0]], pts[e[1]], IM_COL32(0, 0, 0, 255), ot);
+    }
+    for (const auto& e : k_box_edges)
+        dl->AddLine(pts[e[0]], pts[e[1]], col, t);
+}
+
+// ── Geometry ─────────────────────────────────────────────────────────────────
+
+// Fixed-size limb list: avoids heap allocation per player per frame.
+// Max limbs: R15 has 15, R6 has 6 — 16 slots is safe.
+struct LimbList {
+    std::uintptr_t addr[16];
+    int count = 0;
+    void push(std::uintptr_t a) { if (a && count < 16) addr[count++] = a; }
+};
+
+static LimbList limb_addrs(const Limbs& l)
+{
+    LimbList v;
+    v.push(l.head);
+    if (l.r6) {
+        v.push(l.torso);
+        v.push(l.l_arm); v.push(l.r_arm);
+        v.push(l.l_leg); v.push(l.r_leg);
+    } else {
+        v.push(l.upper_torso); v.push(l.lower_torso);
+        v.push(l.l_upper_arm); v.push(l.l_lower_arm); v.push(l.l_hand);
+        v.push(l.r_upper_arm); v.push(l.r_lower_arm); v.push(l.r_hand);
+        v.push(l.l_upper_leg); v.push(l.l_lower_leg); v.push(l.l_foot);
+        v.push(l.r_upper_leg); v.push(l.r_lower_leg); v.push(l.r_foot);
+    }
+    return v;
+}
+
+static bool part_pose(std::uintptr_t part, Vec3& pos, float rot[9], Vec3& sz)
+{
+    const PartData* pd = part_data(part);
+    if (!pd || !pd->prim) return false;
+    pos = pd->pos;
+    if (!valid(pos)) return false;
+    sz = pd->sz;
+    if (!std::isfinite(sz.x) || !std::isfinite(sz.y) || !std::isfinite(sz.z)) return false;
+    std::memcpy(rot, pd->rot, 9 * sizeof(float));
+    return true;
+}
+
+static bool part_obb_bounds(const Vec3& pos, const float rot[9], const Vec3& sz,
+                            const Mat4& mv, float sw, float sh, bool use_screen,
+                            Vec3& wmin, Vec3& wmax,
+                            float& bmin_x, float& bmin_y, float& bmax_x, float& bmax_y)
+{
+    if (sz.x < 0.01f && sz.y < 0.01f && sz.z < 0.01f) return false;
+    const float hx = sz.x * 0.5f, hy = sz.y * 0.5f, hz = sz.z * 0.5f;
+    // Precompute rotated half-extents to avoid repeated multiply inside the loop
+    // Using the "max of projections" trick: for each world axis the AABB extent
+    // is |R*h|. For the screen rect we still need individual corners.
+    static const float lc[8][3] = {
+        { -1.f, -1.f, -1.f }, { -1.f, -1.f, 1.f },
+        { -1.f,  1.f, -1.f }, { -1.f,  1.f, 1.f },
+        {  1.f, -1.f, -1.f }, {  1.f, -1.f, 1.f },
+        {  1.f,  1.f, -1.f }, {  1.f,  1.f, 1.f },
+    };
+
+    bool any = false;
+    for (int i = 0; i < 8; ++i) {
+        const float lx = hx * lc[i][0];
+        const float ly = hy * lc[i][1];
+        const float lz = hz * lc[i][2];
+        const Vec3 wc{
+            pos.x + rot[0] * lx + rot[1] * ly + rot[2] * lz,
+            pos.y + rot[3] * lx + rot[4] * ly + rot[5] * lz,
+            pos.z + rot[6] * lx + rot[7] * ly + rot[8] * lz,
+        };
+        if (wc.x < wmin.x) wmin.x = wc.x; if (wc.x > wmax.x) wmax.x = wc.x;
+        if (wc.y < wmin.y) wmin.y = wc.y; if (wc.y > wmax.y) wmax.y = wc.y;
+        if (wc.z < wmin.z) wmin.z = wc.z; if (wc.z > wmax.z) wmax.z = wc.z;
+        if (!use_screen) continue;
+        ImVec2 s{};
+        if (w2s(wc, mv, sw, sh, s)) {
+            if (s.x < bmin_x) bmin_x = s.x; if (s.x > bmax_x) bmax_x = s.x;
+            if (s.y < bmin_y) bmin_y = s.y; if (s.y > bmax_y) bmax_y = s.y;
+            any = true;
+        }
+    }
+    return any;
 }
 
 static void draw_health_bar(ImDrawList* dl, float bx0, float by0, float by1, float frac, ImU32 fill_col)
@@ -343,13 +477,15 @@ static void draw_health_bar(ImDrawList* dl, float bx0, float by0, float by1, flo
     dl->AddRectFilled(ImVec2{ bx1, by0 }, ImVec2{ bx1 + 1.f, by1 }, ob);
 }
 
+// ── Main draw loop ───────────────────────────────────────────────────────────
 
-void draw(const std::vector<rbx::Player>& list) {
+void draw(const std::vector<rbx::Player>& list)
+{
     if (!enabled) return;
     if (!rbx::visual_eng) return;
     if (!focused()) return;
 
-    ++frame_stamp;
+    g_now = GetTickCount64();
 
     const Mat4 mv = rbx::view_matrix();
     const ImVec2 disp = ImGui::GetIO().DisplaySize;
@@ -363,6 +499,9 @@ void draw(const std::vector<rbx::Player>& list) {
 
     auto* dl = ImGui::GetBackgroundDrawList();
 
+    // Squared distance threshold — avoids sqrtf for the cull check.
+    const float max_dist_sq = max_dist * max_dist;
+
     for (const auto& p : list) {
         if (!p.character) continue;
         if (sv::dead_check && p.humanoid && p.health <= 0.f) continue;
@@ -375,23 +514,24 @@ void draw(const std::vector<rbx::Player>& list) {
         if (!valid(rp)) continue;
 
         const Vec3 delta = rp - cam;
-        const float dist = sqrtf(delta.dot(delta));
-        if (dist > max_dist) continue;
+        const float dist_sq = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+        if (dist_sq > max_dist_sq) continue;
+
+        // sqrtf only when actually needed for labels/flags
+        const float dist = (distance || (flags && (flag_sel & ((1 << 4) | (1 << 5))))) ?
+                           sqrtf(dist_sq) : 0.f;
 
         const Limbs l = limbs_of(p.character);
         if (!l.head || !l.hrp) continue;
 
+        // ── Screen-space box from head/hrp (fast fallback anchor) ──────────
         float x0{}, x1{}, y0{}, y1{};
-        if (box_style == 1) {
-            if (!dynamic_bounds(l, mv, sw, sh, x0, x1, y0, y1)) continue;
-        }
-        else {
+        {
             const Vec3 hp = part_pos(l.head);
             if (!valid(hp)) continue;
 
-            const bool r6 = l.r6;
             const Vec3 top3{ hp.x, hp.y + 0.5f, hp.z };
-            const Vec3 bot3{ rp.x, rp.y - (r6 ? 3.0f : 2.5f), rp.z };
+            const Vec3 bot3{ rp.x, rp.y - (l.r6 ? 3.0f : 2.5f), rp.z };
 
             ImVec2 top{}, bot{};
             if (!w2s(top3, mv, sw, sh, top)) continue;
@@ -409,13 +549,104 @@ void draw(const std::vector<rbx::Player>& list) {
 
         const ImU32 box_col = (friendly && p.friendly) ? to_col(friendly_color) : to_col(box_color);
 
+        // ── Distance LOD ────────────────────────────────────────────────────
+        // The anchor rect above is already a decent box. Per-limb OBB geometry
+        // (and mesh bounds) exists to hug the avatar closely, which only matters
+        // up close — for everyone whose box would be smaller than ~45px we skip
+        // it entirely. This is the big scaling win in full lobbies: far players
+        // cost nothing per frame instead of ~16 part reads + transforms each.
+        const float anchor_h = y1 - y0;
+        const bool detailed = anchor_h >= 45.0f;
+
+        // ── OBB geometry pass ───────────────────────────────────────────────
+        float bx0 = 1e9f, by0 = 1e9f, bx1 = -1e9f, by1 = -1e9f;
+        Vec3 wmin{ 1e9f, 1e9f, 1e9f }, wmax{ -1e9f, -1e9f, -1e9f };
+        bool have_geo = false;
+
+        if (detailed) {
+            const LimbList limbs = limb_addrs(l);
+            for (int li = 0; li < limbs.count; ++li) {
+                Vec3 pos{}, sz{};
+                float rot[9]{};
+                if (!part_pose(limbs.addr[li], pos, rot, sz)) continue;
+                part_obb_bounds(pos, rot, sz, mv, sw, sh, limbs.addr[li] != p.hrp,
+                                wmin, wmax, bx0, by0, bx1, by1);
+            }
+            have_geo = wmin.x <= wmax.x;
+
+            if (bounding_type == 1 && p.character) {
+                float mx0 = 1e9f, my0 = 1e9f, mx1 = -1e9f, my1 = -1e9f;
+                Vec3 mwmin{ 1e9f, 1e9f, 1e9f }, mwmax{ -1e9f, -1e9f, -1e9f };
+                if (meshes::expand_bounds(p.character, mv, sw, sh, mx0, mx1, my0, my1, mwmin, mwmax)) {
+                    bx0 = mx0; by0 = my0; bx1 = mx1; by1 = my1;
+                    wmin = mwmin; wmax = mwmax;
+                    have_geo = true;
+                }
+            }
+
+            if (bounding_type == 0 && have_geo) {
+                // Use cached part data for head size — no extra RPM.
+                const Vec3 hp = part_pos(l.head);
+                if (valid(hp)) {
+                    float head_half = 0.5f;
+                    const PartData* hpd = part_data(l.head);
+                    if (hpd && hpd->prim)
+                        head_half = (std::max)(hpd->sz.y * 0.5f, 0.01f);
+
+                    const Vec3 top3{ hp.x, hp.y + head_half, hp.z };
+                    ImVec2 ts{};
+                    if (w2s(top3, mv, sw, sh, ts) && ts.y < by0 - 2.f)
+                        by0 = ts.y;
+
+                    float feet_y = rp.y - (l.r6 ? 3.0f : 2.5f);
+                    auto feet_lo = [&](std::uintptr_t f) {
+                        const PartData* fpd = part_data(f);
+                        if (!fpd || !fpd->prim) return;
+                        float fy = fpd->pos.y - fpd->sz.y * 0.5f;
+                        if (fy < feet_y) feet_y = fy;
+                    };
+                    feet_lo(l.l_foot);
+                    feet_lo(l.r_foot);
+
+                    const Vec3 bot3{ hp.x, feet_y, hp.z };
+                    ImVec2 bs{};
+                    if (w2s(bot3, mv, sw, sh, bs) && bs.y > by1 + 2.f)
+                        by1 = bs.y;
+                }
+            }
+
+            if (have_geo && bx0 < bx1 && by0 < by1) {
+                x0 = bx0; y0 = by0; x1 = bx1; y1 = by1;
+            }
+        }
+
+        // ── ESP elements ────────────────────────────────────────────────────
         if (box) {
             draw_box_fill(dl, x0, y0, x1, y1);
-            if (skeleton) render_skeleton(dl, l, mv, sw, sh);
-            if (box_type == 1) draw_corner_box(dl, x0, y0, x1, y1, box_col);
-            else draw_box(dl, x0, y0, x1, y1, box_col);
+            if (detailed && skeleton) render_skeleton(dl, l, mv, sw, sh);
+
+            if (box_mode == 2 && have_geo) {
+                ImVec2 pts[8];
+                bool all_ok = true;
+                for (int i = 0; i < 8 && all_ok; ++i) {
+                    const Vec3 c{
+                        (i & 4) ? wmax.x : wmin.x,
+                        (i & 2) ? wmax.y : wmin.y,
+                        (i & 1) ? wmax.z : wmin.z
+                    };
+                    if (!w2s(c, mv, sw, sh, pts[i])) all_ok = false;
+                }
+                if (all_ok)
+                    draw_box_3d_edges(dl, pts, box_col);
+                else
+                    draw_box_px(dl, x0, y0, x1, y1, box_col);
+            }
+            else if (box_mode == 1)
+                draw_corner_box_px(dl, x0, y0, x1, y1, box_col);
+            else
+                draw_box_px(dl, x0, y0, x1, y1, box_col);
         }
-        else if (skeleton) {
+        else if (detailed && skeleton) {
             render_skeleton(dl, l, mv, sw, sh);
         }
 
@@ -423,20 +654,24 @@ void draw(const std::vector<rbx::Player>& list) {
             float f = p.health / p.max_health;
             if (!std::isfinite(f)) f = 1.f;
             f = std::clamp(f, 0.f, 1.f);
-            const ImU32 hcol = IM_COL32(static_cast<int>(255.f * (1.f - f)), static_cast<int>(255.f * f), 0, 255);
+            const ImU32 hcol = IM_COL32(static_cast<int>(255.f * (1.f - f)),
+                                         static_cast<int>(255.f * f), 0, 255);
             draw_health_bar(dl, std::floor(x0 - 4.f), y0, y1, f, hcol);
         }
 
         if (name_tag && !p.name.empty()) {
             const ImVec2 ts = text_size(p.name);
-            outlined_text(dl, ImVec2{ (x0 + x1) * 0.5f - ts.x * 0.5f, y0 - ts.y - 2.f }, p.name, to_col(name_color));
+            outlined_text(dl, ImVec2{ (x0 + x1) * 0.5f - ts.x * 0.5f, y0 - ts.y - 2.f },
+                          p.name, to_col(name_color));
         }
 
         float below = y1 + 2.f;
         if (distance) {
-            const std::string dt = std::to_string(static_cast<int>(dist)) + "m";
-            const ImVec2 ts = text_size(dt);
-            outlined_text(dl, ImVec2{ (x0 + x1) * 0.5f - ts.x * 0.5f, below }, dt, to_col(distance_color));
+            char buf[32];
+            const int di = static_cast<int>(dist);
+            const int len = std::snprintf(buf, sizeof(buf), "%dm", di);
+            const ImVec2 ts = text_size(buf);
+            outlined_text(dl, ImVec2{ (x0 + x1) * 0.5f - ts.x * 0.5f, below }, buf, to_col(distance_color));
             below += ts.y + 3.f;
         }
 
@@ -447,31 +682,41 @@ void draw(const std::vector<rbx::Player>& list) {
         }
 
         if (flags) {
-            const std::uintptr_t prim = p.hrp ? mem::read<std::uintptr_t>(p.hrp + off::Primitive) : 0;
-            const Vec3 vel = (prim && off::Velocity) ? mem::read<Vec3>(prim + off::Velocity) : Vec3{};
+            // Re-use cached prim for velocity — no extra RPM.
+            Vec3 vel{};
+            const PartData* hrppd = part_data(p.hrp);
+            if (hrppd && hrppd->prim && off::Velocity)
+                vel = mem::read<Vec3>(hrppd->prim + off::Velocity);
             const float speed_h = sqrtf(vel.x * vel.x + vel.z * vel.z);
 
             float fx = x1 + 4.f;
             float fy = y0;
-            auto flag_text = [&](const std::string& t, ImU32 c) {
+            auto flag_text = [&](const char* t, ImU32 c) {
                 outlined_text(dl, ImVec2{ fx, fy }, t, c);
                 fy += font_size + 2.f;
             };
 
             const ImU32 fc = to_col(flags_color);
+            char buf[32];
             if (flag_sel & (1 << 0)) {
-                if (vel.y > 2.f)        flag_text("Jumping", fc);
-                else if (vel.y < -2.f)  flag_text("Falling", fc);
+                if (vel.y > 2.f)         flag_text("Jumping", fc);
+                else if (vel.y < -2.f)   flag_text("Falling", fc);
                 else if (speed_h > 1.5f) flag_text("Running", fc);
-                else                     flag_text("Idle", fc);
+                else                     flag_text("Idle",    fc);
             }
             if (flag_sel & (1 << 1)) flag_text(l.r6 ? "R6" : "R15", fc);
-            if ((flag_sel & (1 << 2)) && p.max_health > 0.f)
-                flag_text(std::to_string(static_cast<int>(p.health / p.max_health * 100.f)) + "% HP", fc);
-            if ((flag_sel & (1 << 3)) && !l.tool.empty()) flag_text(l.tool, fc);
-            if (flag_sel & (1 << 4)) flag_text(std::to_string(static_cast<int>(dist)) + "m", fc);
+            if ((flag_sel & (1 << 2)) && p.max_health > 0.f) {
+                std::snprintf(buf, sizeof(buf), "%d%% HP",
+                    static_cast<int>(p.health / p.max_health * 100.f));
+                flag_text(buf, fc);
+            }
+            if ((flag_sel & (1 << 3)) && !l.tool.empty()) flag_text(l.tool.c_str(), fc);
+            if (flag_sel & (1 << 4)) {
+                const float d = dist > 0.f ? dist : sqrtf(dist_sq);
+                std::snprintf(buf, sizeof(buf), "%dm", static_cast<int>(d));
+                flag_text(buf, fc);
+            }
             if (flag_sel & (1 << 5)) {
-                char buf[32];
                 std::snprintf(buf, sizeof(buf), "%.1f u/s", speed_h);
                 flag_text(buf, fc);
             }
@@ -481,34 +726,31 @@ void draw(const std::vector<rbx::Player>& list) {
             const Vec3 hp = part_pos(l.head);
             ImVec2 hs{};
             if (valid(hp) && w2s(hp, mv, sw, sh, hs)) {
-                const float r = head_dot_size * std::clamp(200.f / (std::max)(dist, 10.f), 0.6f, 1.4f);
+                const float d = dist > 0.f ? dist : sqrtf(dist_sq);
+                const float r = head_dot_size * std::clamp(200.f / (std::max)(d, 10.f), 0.6f, 1.4f);
                 dl->AddCircleFilled(hs, r, to_col(head_dot_color), 16);
                 dl->AddCircle(hs, r + 1.f, IM_COL32(0, 0, 0, 180), 16, 0.5f);
             }
         }
 
-        if (view_direction && p.hrp && off::Primitive) {
-            const std::uintptr_t prim = mem::read<std::uintptr_t>(p.hrp + off::Primitive);
-            if (prim && off::Rotation) {
-                float rot[9]{};
-                for (int i = 0; i < 9; ++i)
-                    rot[i] = mem::read<float>(prim + off::Rotation + static_cast<std::uint64_t>(i) * sizeof(float));
+        if (view_direction && p.hrp) {
+            // Rotation already in PartData cache — zero extra RPM.
+            const PartData* pd = part_data(p.hrp);
+            if (pd && pd->prim) {
+                const float* rot = pd->rot;
                 Vec3 look{ -rot[2], -rot[5], -rot[8] };
                 const float len_sq = look.x * look.x + look.y * look.y + look.z * look.z;
                 if (len_sq > 1e-6f) {
                     const float inv = 1.f / sqrtf(len_sq);
                     look.x *= inv; look.y *= inv; look.z *= inv;
 
-                    const Vec3 hp = part_pos(l.head);
-                    if (valid(hp) && valid(rp)) {
-                        const float len = std::clamp(view_dir_length, 1.f, 50.f);
-                        const Vec3 end{ rp.x + look.x * len, rp.y + look.y * len, rp.z + look.z * len };
-                        ImVec2 s0{}, s1{};
-                        if (w2s(rp, mv, sw, sh, s0) && w2s(end, mv, sw, sh, s1)) {
-                            const ImU32 c = to_col(view_dir_color);
-                            line(dl, s0, s1, c, 2.f, true);
-                            dl->AddCircleFilled(s1, 2.5f, c, 10);
-                        }
+                    const float len = std::clamp(view_dir_length, 1.f, 50.f);
+                    const Vec3 end{ rp.x + look.x * len, rp.y + look.y * len, rp.z + look.z * len };
+                    ImVec2 s0{}, s1{};
+                    if (w2s(rp, mv, sw, sh, s0) && w2s(end, mv, sw, sh, s1)) {
+                        const ImU32 c = to_col(view_dir_color);
+                        line(dl, s0, s1, c, 2.f, true);
+                        dl->AddCircleFilled(s1, 2.5f, c, 10);
                     }
                 }
             }

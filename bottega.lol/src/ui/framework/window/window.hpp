@@ -46,6 +46,7 @@ namespace gui
 		std::string window_title_show{};
 		std::string window_tld{};
 		bool m_opened{ true };
+		bool react_to_menu_key{ true };
 
 	private:
 		void apply_flags(WindowFlags flags);

@@ -1,4 +1,5 @@
 #include "mem.h"
+#include <cstring>
 #include <tlhelp32.h>
 
 
@@ -101,6 +102,63 @@ bool read_block(uintptr_t addr, void* dst, size_t size)
 {
     if (!addr || !dst || !size || !hProc) return false;
     return ReadProcessMemory(hProc, (LPCVOID)addr, dst, size, NULL) != 0;
+}
+
+bool write_string(uintptr_t addr, const std::string& val)
+{
+    if (!addr || !hProc || addr < 0x10000) return false;
+
+    const size_t len = val.size();
+
+    // short strings live inline in the 16-byte union at +0x00.
+    if (len < 16)
+    {
+        char buf[16]{};
+        std::memcpy(buf, val.data(), len);
+        if (!WriteProcessMemory(hProc, (LPVOID)addr, buf, 16, NULL)) return false;
+        if (!write<size_t>(addr + 0x10, len)) return false;
+        if (!write<size_t>(addr + 0x18, 0)) return false; // _Myres 0 <=> cap 15
+        return true;
+    }
+
+    const size_t cur_res = read<size_t>(addr + 0x18);
+    const size_t cur_cap = (cur_res + 1) * 16 - 1;
+    const uintptr_t cur_ptr = read<uintptr_t>(addr);
+
+    // reuse the existing heap buffer when it is big enough.
+    if (cur_ptr != addr && cur_ptr >= 0x10000 && cur_cap >= len)
+    {
+        if (!WriteProcessMemory(hProc, (LPVOID)cur_ptr, val.data(), len + 1, NULL)) return false;
+        if (!write<size_t>(addr + 0x10, len)) return false;
+        return true;
+    }
+
+    // carve a fresh page for the payload and install it into the string object.
+    LPVOID page = VirtualAllocEx(hProc, nullptr, len + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!page) return false;
+
+    if (!WriteProcessMemory(hProc, page, val.data(), len + 1, NULL))
+    {
+        VirtualFreeEx(hProc, page, 0, MEM_RELEASE);
+        return false;
+    }
+    if (!WriteProcessMemory(hProc, (LPVOID)(addr + 0x00), &page, sizeof(page), NULL))
+    {
+        VirtualFreeEx(hProc, page, 0, MEM_RELEASE);
+        return false;
+    }
+    if (!write<size_t>(addr + 0x10, len))
+    {
+        VirtualFreeEx(hProc, page, 0, MEM_RELEASE);
+        return false;
+    }
+    const size_t res = (len + 1) / 16 + 1; // reported cap >= len
+    if (!write<size_t>(addr + 0x18, res))
+    {
+        VirtualFreeEx(hProc, page, 0, MEM_RELEASE);
+        return false;
+    }
+    return true;
 }
 
 }

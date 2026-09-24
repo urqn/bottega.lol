@@ -49,7 +49,7 @@ namespace gui
 
         float max_scroll = std::max(0.0f, m_content_height - size.y);
         m_target_scroll = std::max(0.0f, std::min(m_target_scroll, max_scroll));
-        m_scroll_anim.update(m_target_scroll);
+        m_scroll_anim.update(m_target_scroll, 60.0f);
 
         render::push_clip_rect(pos, size);
 

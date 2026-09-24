@@ -5,6 +5,7 @@
 #include <imgui_internal.h>
 #include <numbers>
 #include <render/render.hpp>
+#include <utils/style.hpp>
 
 #include <print>
 
@@ -164,14 +165,14 @@ namespace render
 		position.y = std::floor(position.y);
 
 		if (text_flags & TextFlagsDropShadow)
-			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } + ImVec2{ 1.0f, 1.0f }, Color::black().scale_alpha(0.75f * color.scalable_alpha()), text.data());
+			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } + ImVec2{ 1.0f, 1.0f }, gui::style::colors::text_shadow.scale_alpha(0.75f * color.scalable_alpha()), text.data());
 
 		if (text_flags & TextFlagsOutline)
 		{
-			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } - ImVec2(1.0f, 0.0f), Color::black().scale_alpha(0.5f * color.scalable_alpha()), text.data());
-			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } - ImVec2(0.0f, 1.0f), Color::black().scale_alpha(0.5f * color.scalable_alpha()), text.data());
-			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } + ImVec2(1.0f, 0.0f), Color::black().scale_alpha(0.5f * color.scalable_alpha()), text.data());
-			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } + ImVec2(0.0f, 1.0f), Color::black().scale_alpha(0.5f * color.scalable_alpha()), text.data());
+			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } - ImVec2(1.0f, 0.0f), gui::style::colors::text_shadow.scale_alpha(0.5f * color.scalable_alpha()), text.data());
+			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } - ImVec2(0.0f, 1.0f), gui::style::colors::text_shadow.scale_alpha(0.5f * color.scalable_alpha()), text.data());
+			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } + ImVec2(1.0f, 0.0f), gui::style::colors::text_shadow.scale_alpha(0.5f * color.scalable_alpha()), text.data());
+			draw_list->AddText(f, font_size, ImVec2{ std::floor(position.x), std::floor(position.y) } + ImVec2(0.0f, 1.0f), gui::style::colors::text_shadow.scale_alpha(0.5f * color.scalable_alpha()), text.data());
 		}
 
 		draw_list->AddText(f, font_size, { std::floor(position.x), std::floor(position.y) }, color, text.data());

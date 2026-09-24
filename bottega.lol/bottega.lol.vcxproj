@@ -81,11 +81,24 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\main.cpp" />
+<ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\core\mem.cpp" />
     <ClCompile Include="src\core\offsets.cpp" />
     <ClCompile Include="src\core\rbx.cpp" />
-    <ClCompile Include="src\features\esp.cpp" />
+<ClCompile Include="src\features\toast.cpp" />
+<ClCompile Include="src\features\trigger.cpp" />
+<ClCompile Include="src\features\hbe.cpp" />
+<ClCompile Include="src\features\hit.cpp" />
+<ClCompile Include="src\features\cosmetic.cpp" />
+<ClCompile Include="src\features\world.cpp" />
+<ClCompile Include="src\features\waypoints.cpp" />
+<ClCompile Include="src\features\perf.cpp" />
+<ClCompile Include="src\features\serverbrowser.cpp" />
+    <ClCompile Include="src\features\check.cpp" />
+    <ClCompile Include="src\features\freeze.cpp" />
+    <ClCompile Include="src\features\npcsys.cpp" />
+<ClCompile Include="src\features\esp.cpp" />
+    <ClCompile Include="src\features\mesh_esp.cpp" />
     <ClCompile Include="src\features\aim.cpp" />
 <ClCompile Include="src\features\movement.cpp" />
     <ClCompile Include="src\features\silent_ray.cpp" />
@@ -136,11 +149,23 @@
     <ClCompile Include="src\lib\yoga\yoga\Yoga.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\core\mem.h" />
+<ClInclude Include="src\core\mem.h" />
     <ClInclude Include="src\core\offsets.h" />
     <ClInclude Include="src\core\rbx.h" />
     <ClInclude Include="src\core\vec.h" />
-    <ClInclude Include="src\features\esp.h" />
+<ClInclude Include="src\features\toast.h" />
+<ClInclude Include="src\features\trigger.h" />
+<ClInclude Include="src\features\hbe.h" />
+<ClInclude Include="src\features\hit.h" />
+<ClInclude Include="src\features\cosmetic.h" />
+<ClInclude Include="src\features\world.h" />
+<ClInclude Include="src\features\waypoints.h" />
+<ClInclude Include="src\features\perf.h" />
+<ClInclude Include="src\features\serverbrowser.h" />
+    <ClInclude Include="src\features\check.h" />
+    <ClInclude Include="src\features\freeze.h" />
+    <ClInclude Include="src\features\npcsys.h" />
+<ClInclude Include="src\features\esp.h" />
     <ClInclude Include="src\features\aim.h" />
 <ClInclude Include="src\features\movement.h" />
     <ClInclude Include="src\features\silent_ray.h" />

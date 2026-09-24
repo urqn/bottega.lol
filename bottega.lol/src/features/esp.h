@@ -10,8 +10,10 @@ namespace esp {
     inline float max_dist = 1500.f;
 
     inline bool  box = true;
-    inline int   box_style = 0; // 0 = static, 1 = dynamic
-    inline int   box_type = 0;  // 0 = bounding, 1 = corner
+    inline int   box_mode = 0;  // 0 = bounding (2D), 1 = corner, 2 = 3D (phantomx)
+    inline int   bounding_type = 0; // 0 = parts (OBB union), 1 = mesh (ExpandBounds)
+    inline bool  box_outline = true; // black back-outline
+    inline float box_thickness = 1.0f;
     inline bool  box_filled = false;
     inline bool  box_fill_gradient = true;
 
@@ -33,7 +35,7 @@ namespace esp {
 
     inline float font_size = 13.f;
 
-    inline std::uint32_t box_color{ 0xFF6B4EF2u };
+    inline std::uint32_t box_color{ 0xFFFFFFFFu };       // top
     inline std::uint32_t box_fill_color{ 0x28000000u };
     inline std::uint32_t box_fill_color2{ 0x50000000u };
     inline std::uint32_t name_color{ 0xFFFFFFFFu };

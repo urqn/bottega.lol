@@ -28,6 +28,13 @@ namespace rbx {
     bool refresh();
     std::vector<Player> players();
 
+    // cache-free live pointer resolvers for hot writer threads (aim/noclip/
+    // fly/freecam). they re-drive the FakeDataModelPtr chain every call and
+    // return 0 the moment a place/workspace tears down, so per-ms writers stop
+    // touching freed instances instead of writing into recycled heap memory.
+    uintptr_t fresh_local_player();
+    uintptr_t fresh_camera();
+
     std::string  name_of(uintptr_t inst);
     std::string  classname(uintptr_t inst);
     uintptr_t    find_child(uintptr_t inst, const char* name);

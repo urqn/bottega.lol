@@ -660,19 +660,35 @@ namespace RaycastSilent {
                         off::find("WorldRoot.RaycastBoundFn");
                     const std::uintptr_t slot =
                         g_hook.module_base + desc_rva_z + bound_fn_offset;
-                    write_protected(slot, &g_hook.originalFunction,
-                                    sizeof(g_hook.originalFunction));
+
+                    // only restore the original handler if the slot still points
+                    // at our thunk: during a place/workspace reset the game can
+                    // re-pick its own bound fn, and writing the stale original
+                    // back would poison the next raycast and crash the game.
+                    if (mem::read<std::uintptr_t>(slot) == g_hook.thunk)
+                        write_protected(slot, &g_hook.originalFunction,
+                                        sizeof(g_hook.originalFunction));
                 }
 
-                if (g_hook.thunk && !g_hook.thunk_owned) {
-                    std::vector<std::uint8_t> pad(k_stub_bytes, 0xCC);
-                    write_protected(g_hook.thunk, pad.data(), pad.size());
-                }
+                const bool has_stub = g_hook.thunk != 0;
+                const bool has_state = g_hook.state != 0;
+                if (has_stub || has_state) {
+                    // a raycast may be mid-flight inside the thunk when a match
+                    // ends; wait it out before padding/freeing, or the next
+                    // access to the freed state/stub faults and force-closes the
+                    // game.
+                    Sleep(60);
 
-                if (g_hook.thunk && g_hook.thunk_owned)
-                    ray_free(g_hook.thunk);
-                if (g_hook.state)
-                    ray_free(g_hook.state);
+                    if (g_hook.thunk && !g_hook.thunk_owned) {
+                        std::vector<std::uint8_t> pad(k_stub_bytes, 0xCC);
+                        write_protected(g_hook.thunk, pad.data(), pad.size());
+                    }
+
+                    if (g_hook.thunk && g_hook.thunk_owned)
+                        ray_free(g_hook.thunk);
+                    if (g_hook.state)
+                        ray_free(g_hook.state);
+                }
                 g_hook = {};
                 g_wallbang = false;
             }
